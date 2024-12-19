@@ -213,7 +213,7 @@ uv run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -864,7 +864,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -1220,7 +1220,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -1580,7 +1580,7 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -1947,7 +1947,7 @@ uv lock [OPTIONS]
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -2282,7 +2282,7 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -2647,7 +2647,7 @@ uv tree [OPTIONS]
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -3110,7 +3110,7 @@ uv tool run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -3438,7 +3438,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -3760,7 +3760,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -4644,7 +4644,7 @@ Download and install Python versions.
 
 Multiple Python versions may be requested.
 
-Supports CPython and PyPy. CPython distributions are downloaded from the `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
+Supports CPython and PyPy. CPython distributions are downloaded from the Astral `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
 
 Python versions are installed into the uv Python directory, which can be retrieved with `uv python dir`.
 
@@ -4709,7 +4709,7 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>Alternative Python variants will still include their tag. For example, installing 3.13+freethreaded with <code>--default</code> will include in <code>python3t</code> and <code>pythont</code>, not <code>python3</code> and <code>python</code>.</p>
 
-<p>If multiple Python versions are requested during the installation, the first request will be the default.</p>
+<p>If multiple Python versions are requested, uv will exit with an error.</p>
 
 </dd><dt><code>--directory</code> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 
@@ -4734,7 +4734,7 @@ uv python install [OPTIONS] [TARGETS]...
 <p>May also be set with the <code>UV_PYTHON_INSTALL_DIR</code> environment variable.</p>
 </dd><dt><code>--mirror</code> <i>mirror</i></dt><dd><p>Set the URL to use as the source for downloading Python installations.</p>
 
-<p>The provided URL will replace <code>https://github.com/indygreg/python-build-standalone/releases/download</code> in, e.g., <code>https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz</code>.</p>
+<p>The provided URL will replace <code>https://github.com/astral-sh/python-build-standalone/releases/download</code> in, e.g., <code>https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz</code>.</p>
 
 <p>Distributions can be read from a local directory by using the <code>file://</code> URL scheme.</p>
 
@@ -5557,7 +5557,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -5998,7 +5998,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -6415,7 +6415,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -7143,7 +7143,7 @@ uv pip list [OPTIONS]
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -7790,7 +7790,7 @@ uv venv [OPTIONS] [PATH]
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
@@ -8074,7 +8074,7 @@ uv build [OPTIONS] [SRC]
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt><code>--index-strategy</code> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
-<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-match</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
 
 <p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
 <p>Possible values:</p>
