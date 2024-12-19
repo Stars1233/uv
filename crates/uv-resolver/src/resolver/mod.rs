@@ -216,7 +216,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             index: index.clone(),
             git: git.clone(),
             capabilities: capabilities.clone(),
-            selector: CandidateSelector::for_resolution(options, &manifest, &env),
+            selector: CandidateSelector::for_resolution(&options, &manifest, &env),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
@@ -310,12 +310,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let root = PubGrubPackage::from(PubGrubPackageInner::Root(self.project.clone()));
         let pubgrub = State::init(root.clone(), MIN_VERSION.clone());
-        let mut prefetcher = BatchPrefetcher::new(
+        let prefetcher = BatchPrefetcher::new(
             self.capabilities.clone(),
             self.index.clone(),
             request_sink.clone(),
         );
-        let state = ForkState::new(pubgrub, self.env.clone(), self.python_requirement.clone());
+        let state = ForkState::new(
+            pubgrub,
+            self.env.clone(),
+            self.python_requirement.clone(),
+            prefetcher,
+        );
         let mut preferences = self.preferences.clone();
         let mut forked_states = self.env.initial_forked_states(state);
         let mut resolutions = vec![];
@@ -393,7 +398,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         else {
                             // All packages have been assigned, the fork has been successfully resolved
                             if tracing::enabled!(Level::DEBUG) {
-                                prefetcher.log_tried_versions();
+                                state.prefetcher.log_tried_versions();
                             }
                             debug!(
                                 "{} resolution took {:.3}s",
@@ -472,7 +477,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // (idempotent due to caching).
                 self.request_package(next_package, url, index, &request_sink)?;
 
-                prefetcher.version_tried(next_package);
+                state.prefetcher.version_tried(next_package);
 
                 let term_intersection = state
                     .pubgrub
@@ -545,7 +550,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // Only consider registry packages for prefetch.
                 if url.is_none() {
-                    prefetcher.prefetch_batches(
+                    state.prefetcher.prefetch_batches(
                         next_package,
                         index,
                         &version,
@@ -624,7 +629,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
                     }
                     ForkedDependencies::Forked {
-                        forks,
+                        mut forks,
                         diverging_packages,
                     } => {
                         debug!(
@@ -632,6 +637,28 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             state.env,
                             start.elapsed().as_secs_f32()
                         );
+
+                        // Prioritize the forks.
+                        match (self.options.fork_strategy, self.options.resolution_mode) {
+                            (ForkStrategy::Fewest, _) | (_, ResolutionMode::Lowest) => {
+                                // Prefer solving forks with lower Python bounds, since they're more
+                                // likely to produce solutions that work for forks with higher
+                                // Python bounds (whereas the inverse is not true).
+                                forks.sort_by(|a, b| {
+                                    a.cmp_requires_python(b)
+                                        .reverse()
+                                        .then_with(|| a.cmp_upper_bounds(b))
+                                });
+                            }
+                            (ForkStrategy::RequiresPython, _) => {
+                                // Otherwise, prefer solving forks with higher Python bounds, since
+                                // we want to prioritize choosing the latest-compatible package
+                                // version for each Python version.
+                                forks.sort_by(|a, b| {
+                                    a.cmp_requires_python(b).then_with(|| a.cmp_upper_bounds(b))
+                                });
+                            }
+                        }
 
                         for new_fork_state in self.forks_to_fork_states(
                             state,
@@ -675,7 +702,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.python_requirement,
             &self.conflicts,
             self.selector.resolution_strategy(),
-            self.options,
+            self.options.clone(),
         )
     }
 
@@ -2136,7 +2163,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             fork_urls,
             env,
             self.workspace_members.clone(),
-            self.options,
+            self.options.clone(),
         ))
     }
 
@@ -2237,6 +2264,10 @@ pub(crate) struct ForkState {
     /// solution that omits Python 3.8 support.
     python_requirement: PythonRequirement,
     conflict_tracker: ConflictTracker,
+    /// Prefetch package versions for packages with many rejected versions.
+    ///
+    /// Tracked on the fork state to avoid counting each identical version between forks as new try.
+    prefetcher: BatchPrefetcher,
 }
 
 impl ForkState {
@@ -2244,6 +2275,7 @@ impl ForkState {
         pubgrub: State<UvDependencyProvider>,
         env: ResolverEnvironment,
         python_requirement: PythonRequirement,
+        prefetcher: BatchPrefetcher,
     ) -> Self {
         Self {
             initial: None,
@@ -2257,6 +2289,7 @@ impl ForkState {
             env,
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
+            prefetcher,
         }
     }
 
@@ -2907,11 +2940,6 @@ impl Dependencies {
         } else if forks.len() == 1 {
             ForkedDependencies::Unforked(forks.pop().unwrap().dependencies)
         } else {
-            // Prioritize the forks. Prefer solving forks with lower Python
-            // bounds, since they're more likely to produce solutions that work
-            // for forks with higher Python bounds (whereas the inverse is not
-            // true).
-            forks.sort();
             ForkedDependencies::Forked {
                 forks,
                 diverging_packages: diverging_packages.into_iter().collect(),
@@ -3224,6 +3252,50 @@ impl Fork {
         });
         Some(self)
     }
+
+    /// Compare forks, preferring forks with g `requires-python` requirements.
+    fn cmp_requires_python(&self, other: &Self) -> Ordering {
+        // A higher `requires-python` requirement indicates a _higher-priority_ fork.
+        //
+        // This ordering ensures that we prefer choosing the highest version for each fork based on
+        // its `requires-python` requirement.
+        //
+        // The reverse would prefer choosing fewer versions, at the cost of using older package
+        // versions on newer Python versions. For example, if reversed, we'd prefer to solve `<3.7
+        // before solving `>=3.7`, since the resolution produced by the former might work for the
+        // latter, but the inverse is unlikely to be true.
+        let self_bound = self.env.requires_python().unwrap_or_default();
+        let other_bound = other.env.requires_python().unwrap_or_default();
+        self_bound.lower().cmp(other_bound.lower())
+    }
+
+    /// Compare forks, preferring forks with upper bounds.
+    fn cmp_upper_bounds(&self, other: &Self) -> Ordering {
+        // We'd prefer to solve `numpy <= 2` before solving `numpy >= 1`, since the resolution
+        // produced by the former might work for the latter, but the inverse is unlikely to be true
+        // due to maximum version selection. (Selecting `numpy==2.0.0` would satisfy both forks, but
+        // selecting the latest `numpy` would not.)
+        let self_upper_bounds = self
+            .dependencies
+            .iter()
+            .filter(|dep| {
+                dep.version
+                    .bounding_range()
+                    .is_some_and(|(_, upper)| !matches!(upper, Bound::Unbounded))
+            })
+            .count();
+        let other_upper_bounds = other
+            .dependencies
+            .iter()
+            .filter(|dep| {
+                dep.version
+                    .bounding_range()
+                    .is_some_and(|(_, upper)| !matches!(upper, Bound::Unbounded))
+            })
+            .count();
+
+        self_upper_bounds.cmp(&other_upper_bounds)
+    }
 }
 
 impl Eq for Fork {}
@@ -3231,50 +3303,6 @@ impl Eq for Fork {}
 impl PartialEq for Fork {
     fn eq(&self, other: &Fork) -> bool {
         self.dependencies == other.dependencies && self.env == other.env
-    }
-}
-
-impl Ord for Fork {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // A higher `requires-python` requirement indicates a _lower-priority_ fork. We'd prefer
-        // to solve `<3.7` before solving `>=3.7`, since the resolution produced by the former might
-        // work for the latter, but the inverse is unlikely to be true.
-        let self_bound = self.env.requires_python().unwrap_or_default();
-        let other_bound = other.env.requires_python().unwrap_or_default();
-
-        other_bound.lower().cmp(self_bound.lower()).then_with(|| {
-            // If there's no difference, prioritize forks with upper bounds. We'd prefer to solve
-            // `numpy <= 2` before solving `numpy >= 1`, since the resolution produced by the former
-            // might work for the latter, but the inverse is unlikely to be true due to maximum
-            // version selection. (Selecting `numpy==2.0.0` would satisfy both forks, but selecting
-            // the latest `numpy` would not.)
-            let self_upper_bounds = self
-                .dependencies
-                .iter()
-                .filter(|dep| {
-                    dep.version
-                        .bounding_range()
-                        .is_some_and(|(_, upper)| !matches!(upper, Bound::Unbounded))
-                })
-                .count();
-            let other_upper_bounds = other
-                .dependencies
-                .iter()
-                .filter(|dep| {
-                    dep.version
-                        .bounding_range()
-                        .is_some_and(|(_, upper)| !matches!(upper, Bound::Unbounded))
-                })
-                .count();
-
-            self_upper_bounds.cmp(&other_upper_bounds)
-        })
-    }
-}
-
-impl PartialOrd for Fork {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
     }
 }
 

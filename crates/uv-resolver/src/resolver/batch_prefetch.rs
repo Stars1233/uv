@@ -39,6 +39,7 @@ enum BatchPrefetchStrategy {
 /// have to fetch the metadata for a lot of versions.
 ///
 /// Note that these all heuristics that could totally prefetch lots of irrelevant versions.
+#[derive(Clone)]
 pub(crate) struct BatchPrefetcher {
     // Internal types.
     tried_versions: FxHashMap<PackageName, usize>,
@@ -235,7 +236,11 @@ impl BatchPrefetcher {
             }
         }
 
-        debug!("Prefetching {prefetch_count} {name} versions");
+        match prefetch_count {
+            0 => debug!("No `{name}` versions to prefetch"),
+            1 => debug!("Prefetched 1 `{name}` version"),
+            _ => debug!("Prefetched {prefetch_count} `{name}` versions"),
+        }
 
         self.last_prefetch.insert(name.clone(), num_tried);
         Ok(())
