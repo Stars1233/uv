@@ -2414,7 +2414,7 @@ pub struct VenvArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, uv will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-match`). This prevents
+    /// limit resolutions to those present on that first index (`first-index`). This prevents
     /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
     /// same name to an alternate index.
     #[arg(long, value_enum, env = EnvVars::UV_INDEX_STRATEGY)]
@@ -3992,7 +3992,7 @@ pub struct ToolUpgradeArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, uv will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-match`). This prevents
+    /// limit resolutions to those present on that first index (`first-index`). This prevents
     /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
     /// same name to an alternate index.
     #[arg(
@@ -4183,7 +4183,7 @@ pub enum PythonCommand {
     ///
     /// Multiple Python versions may be requested.
     ///
-    /// Supports CPython and PyPy. CPython distributions are downloaded from the
+    /// Supports CPython and PyPy. CPython distributions are downloaded from the Astral
     /// `python-build-standalone` project. PyPy distributions are downloaded from `python.org`.
     ///
     /// Python versions are installed into the uv Python directory, which can be retrieved with `uv
@@ -4300,7 +4300,7 @@ pub struct PythonInstallArgs {
     ///
     /// See `uv python dir` to view the current Python installation directory. Defaults to
     /// `~/.local/share/uv/python`.
-    #[arg(long, short, env = "UV_PYTHON_INSTALL_DIR")]
+    #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
     pub install_dir: Option<PathBuf>,
 
     /// The Python version(s) to install.
@@ -4315,7 +4315,7 @@ pub struct PythonInstallArgs {
 
     /// Set the URL to use as the source for downloading Python installations.
     ///
-    /// The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+    /// The provided URL will replace `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g., `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
     ///
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[arg(long, env = EnvVars::UV_PYTHON_INSTALL_MIRROR)]
@@ -4354,8 +4354,7 @@ pub struct PythonInstallArgs {
     /// 3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
     /// and `python`.
     ///
-    /// If multiple Python versions are requested during the installation, the first request will be
-    /// the default.
+    /// If multiple Python versions are requested, uv will exit with an error.
     #[arg(long)]
     pub default: bool,
 }
@@ -4364,7 +4363,7 @@ pub struct PythonInstallArgs {
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonUninstallArgs {
     /// The directory where the Python was installed.
-    #[arg(long, short, env = "UV_PYTHON_INSTALL_DIR")]
+    #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
     pub install_dir: Option<PathBuf>,
 
     /// The Python version(s) to uninstall.
@@ -4657,7 +4656,7 @@ pub struct InstallerArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, uv will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-match`). This prevents
+    /// limit resolutions to those present on that first index (`first-index`). This prevents
     /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
     /// same name to an alternate index.
     #[arg(
@@ -4799,7 +4798,7 @@ pub struct ResolverArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, uv will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-match`). This prevents
+    /// limit resolutions to those present on that first index (`first-index`). This prevents
     /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
     /// same name to an alternate index.
     #[arg(
@@ -4989,7 +4988,7 @@ pub struct ResolverInstallerArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, uv will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-match`). This prevents
+    /// limit resolutions to those present on that first index (`first-index`). This prevents
     /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
     /// same name to an alternate index.
     #[arg(
@@ -5160,7 +5159,7 @@ pub struct FetchArgs {
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, uv will stop at the first index on which a given package is available, and
-    /// limit resolutions to those present on that first index (`first-match`). This prevents
+    /// limit resolutions to those present on that first index (`first-index`). This prevents
     /// "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
     /// same name to an alternate index.
     #[arg(

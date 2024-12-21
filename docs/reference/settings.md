@@ -858,7 +858,7 @@ PyPI default index.
 The strategy to use when resolving against multiple index URLs.
 
 By default, uv will stop at the first index on which a given package is available, and
-limit resolutions to those present on that first index (`first-match`). This prevents
+limit resolutions to those present on that first index (`first-index`). This prevents
 "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
 same name to an alternate index.
 
@@ -1412,9 +1412,9 @@ Whether to allow Python downloads.
 
 Mirror URL for downloading managed Python installations.
 
-By default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/indygreg/python-build-standalone).
+By default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone).
 This variable can be set to a mirror URL to use a different source for Python installations.
-The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+The provided URL will replace `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g., `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
 
 Distributions can be read from a local directory by using the `file://` URL scheme.
 
@@ -1428,12 +1428,12 @@ Distributions can be read from a local directory by using the `file://` URL sche
 
     ```toml
     [tool.uv]
-    python-install-mirror = "https://github.com/indygreg/python-build-standalone/releases/download"
+    python-install-mirror = "https://github.com/astral-sh/python-build-standalone/releases/download"
     ```
 === "uv.toml"
 
     ```toml
-    python-install-mirror = "https://github.com/indygreg/python-build-standalone/releases/download"
+    python-install-mirror = "https://github.com/astral-sh/python-build-standalone/releases/download"
     ```
 
 ---
@@ -2214,7 +2214,7 @@ Include distribution hashes in the output file.
 The strategy to use when resolving against multiple index URLs.
 
 By default, uv will stop at the first index on which a given package is available, and
-limit resolutions to those present on that first index (`first-match`). This prevents
+limit resolutions to those present on that first index (`first-index`). This prevents
 "dependency confusion" attacks, whereby an attacker can upload a malicious package under the
 same name to an alternate index.
 

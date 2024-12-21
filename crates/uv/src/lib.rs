@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::env;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
@@ -175,9 +174,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 Some(RunCommand::PythonRemote(script, _)) => {
                     Pep723Metadata::read(&script).await?.map(Pep723Item::Remote)
                 }
-                Some(RunCommand::PythonStdin(contents)) => {
-                    Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin)
-                }
+                Some(
+                    RunCommand::PythonStdin(contents, _) | RunCommand::PythonGuiStdin(contents, _),
+                ) => Pep723Metadata::parse(contents)?.map(Pep723Item::Stdin),
                 _ => None,
             }
         } else if let ProjectCommand::Remove(uv_cli::RemoveArgs {

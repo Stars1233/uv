@@ -60,24 +60,15 @@ mod tree;
 pub const VERSION: u32 = 1;
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 = MarkerTree::from_str(
-        "platform_system == 'Linux' and os_name == 'posix' and sys_platform == 'linux'",
-    )
-    .unwrap();
+    let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static WINDOWS_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 = MarkerTree::from_str(
-        "platform_system == 'Windows' and os_name == 'nt' and sys_platform == 'win32'",
-    )
-    .unwrap();
+    let pep508 = MarkerTree::from_str("os_name == 'nt' and sys_platform == 'win32'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 static MAC_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
-    let pep508 = MarkerTree::from_str(
-        "platform_system == 'Darwin' and os_name == 'posix' and sys_platform == 'darwin'",
-    )
-    .unwrap();
+    let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'darwin'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 
@@ -1712,7 +1703,7 @@ impl Package {
                             self.wheels[best_wheel_index].filename.clone();
                         let url = Url::from(ParsedArchiveUrl {
                             url: url.to_url(),
-                            subdirectory: direct.subdirectory.as_ref().map(PathBuf::from),
+                            subdirectory: direct.subdirectory.clone(),
                             ext: DistExtension::Wheel,
                         });
                         let direct_dist = DirectUrlBuiltDist {
@@ -1857,14 +1848,14 @@ impl Package {
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                 let url = Url::from(ParsedGitUrl {
                     url: git_url.clone(),
-                    subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                    subdirectory: git.subdirectory.clone(),
                 });
 
                 let git_dist = GitSourceDist {
                     name: self.id.name.clone(),
                     url: VerbatimUrl::from_url(url),
                     git: Box::new(git_url),
-                    subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                    subdirectory: git.subdirectory.clone(),
                 };
                 uv_distribution_types::SourceDist::Git(git_dist)
             }
@@ -1873,15 +1864,16 @@ impl Package {
                 let DistExtension::Source(ext) = DistExtension::from_path(url.as_ref())? else {
                     return Ok(None);
                 };
+                let location = url.to_url();
                 let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                 let url = Url::from(ParsedArchiveUrl {
-                    url: url.to_url(),
+                    url: location.clone(),
                     subdirectory: subdirectory.clone(),
                     ext: DistExtension::Source(ext),
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
-                    location: url.clone(),
+                    location,
                     subdirectory: subdirectory.clone(),
                     ext,
                     url: VerbatimUrl::from_url(url),
@@ -2483,11 +2475,7 @@ impl Source {
         Source::Direct(
             normalize_url(direct_dist.url.to_url()),
             DirectSource {
-                subdirectory: direct_dist
-                    .subdirectory
-                    .as_deref()
-                    .and_then(Path::to_str)
-                    .map(ToString::to_string),
+                subdirectory: direct_dist.subdirectory.clone(),
             },
         )
     }
@@ -2549,11 +2537,7 @@ impl Source {
                 precise: git_dist.git.precise().unwrap_or_else(|| {
                     panic!("Git distribution is missing a precise hash: {git_dist}")
                 }),
-                subdirectory: git_dist
-                    .subdirectory
-                    .as_deref()
-                    .and_then(Path::to_str)
-                    .map(ToString::to_string),
+                subdirectory: git_dist.subdirectory.clone(),
             },
         )
     }
@@ -2611,7 +2595,10 @@ impl Source {
             Source::Direct(ref url, DirectSource { ref subdirectory }) => {
                 source_table.insert("url", Value::from(url.as_ref()));
                 if let Some(ref subdirectory) = *subdirectory {
-                    source_table.insert("subdirectory", Value::from(subdirectory));
+                    source_table.insert(
+                        "subdirectory",
+                        Value::from(PortablePath::from(subdirectory).to_string()),
+                    );
                 }
             }
             Source::Path(ref path) => {
@@ -2691,15 +2678,14 @@ impl Source {
 #[serde(untagged)]
 enum SourceWire {
     Registry {
-        registry: RegistrySource,
+        registry: RegistrySourceWire,
     },
     Git {
         git: String,
     },
     Direct {
         url: UrlString,
-        #[serde(default)]
-        subdirectory: Option<String>,
+        subdirectory: Option<PortablePathBuf>,
     },
     Path {
         path: PortablePathBuf,
@@ -2723,7 +2709,7 @@ impl TryFrom<SourceWire> for Source {
         use self::SourceWire::*;
 
         match wire {
-            Registry { registry } => Ok(Source::Registry(registry)),
+            Registry { registry } => Ok(Source::Registry(registry.into())),
             Git { git } => {
                 let url = Url::parse(&git)
                     .map_err(|err| SourceParseError::InvalidUrl {
@@ -2745,7 +2731,12 @@ impl TryFrom<SourceWire> for Source {
 
                 Ok(Source::Git(UrlString::from(url), git_source))
             }
-            Direct { url, subdirectory } => Ok(Source::Direct(url, DirectSource { subdirectory })),
+            Direct { url, subdirectory } => Ok(Source::Direct(
+                url,
+                DirectSource {
+                    subdirectory: subdirectory.map(PathBuf::from),
+                },
+            )),
             Path { path } => Ok(Source::Path(path.into())),
             Directory { directory } => Ok(Source::Directory(directory.into())),
             Editable { editable } => Ok(Source::Editable(editable.into())),
@@ -2772,7 +2763,15 @@ impl std::fmt::Display for RegistrySource {
     }
 }
 
-impl<'de> serde::de::Deserialize<'de> for RegistrySource {
+#[derive(Clone, Debug)]
+enum RegistrySourceWire {
+    /// Ex) `https://pypi.org/simple`
+    Url(UrlString),
+    /// Ex) `../path/to/local/index`
+    Path(PortablePathBuf),
+}
+
+impl<'de> serde::de::Deserialize<'de> for RegistrySourceWire {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::de::Deserializer<'de>,
@@ -2780,7 +2779,7 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySource {
         struct Visitor;
 
         impl serde::de::Visitor<'_> for Visitor {
-            type Value = RegistrySource;
+            type Value = RegistrySourceWire;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 formatter.write_str("a valid URL or a file path")
@@ -2795,14 +2794,14 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySource {
                         serde::Deserialize::deserialize(serde::de::value::StrDeserializer::new(
                             value,
                         ))
-                        .map(RegistrySource::Url)?,
+                        .map(RegistrySourceWire::Url)?,
                     )
                 } else {
                     Ok(
                         serde::Deserialize::deserialize(serde::de::value::StrDeserializer::new(
                             value,
                         ))
-                        .map(RegistrySource::Path)?,
+                        .map(RegistrySourceWire::Path)?,
                     )
                 }
             }
@@ -2812,9 +2811,18 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySource {
     }
 }
 
+impl From<RegistrySourceWire> for RegistrySource {
+    fn from(wire: RegistrySourceWire) -> Self {
+        match wire {
+            RegistrySourceWire::Url(url) => Self::Url(url),
+            RegistrySourceWire::Path(path) => Self::Path(path.into()),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 struct DirectSource {
-    subdirectory: Option<String>,
+    subdirectory: Option<PathBuf>,
 }
 
 /// NOTE: Care should be taken when adding variants to this enum. Namely, new
@@ -2824,7 +2832,7 @@ struct DirectSource {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 struct GitSource {
     precise: GitSha,
-    subdirectory: Option<String>,
+    subdirectory: Option<PathBuf>,
     kind: GitSourceKind,
 }
 
@@ -2846,7 +2854,7 @@ impl GitSource {
                 "tag" => kind = GitSourceKind::Tag(val.into_owned()),
                 "branch" => kind = GitSourceKind::Branch(val.into_owned()),
                 "rev" => kind = GitSourceKind::Rev(val.into_owned()),
-                "subdirectory" => subdirectory = Some(val.into_owned()),
+                "subdirectory" => subdirectory = Some(PortablePathBuf::from(val.as_ref()).into()),
                 _ => continue,
             };
         }
@@ -2897,11 +2905,16 @@ enum SourceDist {
         #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
+    Metadata {
+        #[serde(flatten)]
+        metadata: SourceDistMetadata,
+    },
 }
 
 impl SourceDist {
     fn filename(&self) -> Option<Cow<str>> {
         match self {
+            SourceDist::Metadata { .. } => None,
             SourceDist::Url { url, .. } => url.filename().ok(),
             SourceDist::Path { path, .. } => {
                 path.file_name().map(|filename| filename.to_string_lossy())
@@ -2911,6 +2924,7 @@ impl SourceDist {
 
     fn url(&self) -> Option<&UrlString> {
         match &self {
+            SourceDist::Metadata { .. } => None,
             SourceDist::Url { url, .. } => Some(url),
             SourceDist::Path { .. } => None,
         }
@@ -2918,6 +2932,7 @@ impl SourceDist {
 
     fn path(&self) -> Option<&Path> {
         match &self {
+            SourceDist::Metadata { .. } => None,
             SourceDist::Url { .. } => None,
             SourceDist::Path { path, .. } => Some(path),
         }
@@ -2925,6 +2940,7 @@ impl SourceDist {
 
     fn hash(&self) -> Option<&Hash> {
         match &self {
+            SourceDist::Metadata { metadata } => metadata.hash.as_ref(),
             SourceDist::Url { metadata, .. } => metadata.hash.as_ref(),
             SourceDist::Path { metadata, .. } => metadata.hash.as_ref(),
         }
@@ -2932,6 +2948,7 @@ impl SourceDist {
 
     fn size(&self) -> Option<u64> {
         match &self {
+            SourceDist::Metadata { metadata } => metadata.size,
             SourceDist::Url { metadata, .. } => metadata.size,
             SourceDist::Path { metadata, .. } => metadata.size,
         }
@@ -2982,14 +2999,16 @@ impl SourceDist {
             uv_distribution_types::SourceDist::Registry(ref reg_dist) => {
                 SourceDist::from_registry_dist(reg_dist, index)
             }
-            uv_distribution_types::SourceDist::DirectUrl(ref direct_dist) => {
-                SourceDist::from_direct_dist(id, direct_dist, hashes).map(Some)
+            uv_distribution_types::SourceDist::DirectUrl(_) => {
+                SourceDist::from_direct_dist(id, hashes).map(Some)
+            }
+            uv_distribution_types::SourceDist::Path(_) => {
+                SourceDist::from_path_dist(id, hashes).map(Some)
             }
             // An actual sdist entry in the lockfile is only required when
             // it's from a registry or a direct URL. Otherwise, it's strictly
             // redundant with the information in all other kinds of `source`.
             uv_distribution_types::SourceDist::Git(_)
-            | uv_distribution_types::SourceDist::Path(_)
             | uv_distribution_types::SourceDist::Directory(_) => Ok(None),
         }
     }
@@ -3038,11 +3057,7 @@ impl SourceDist {
         }
     }
 
-    fn from_direct_dist(
-        id: &PackageId,
-        direct_dist: &DirectUrlSourceDist,
-        hashes: &[HashDigest],
-    ) -> Result<SourceDist, LockError> {
+    fn from_direct_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<SourceDist, LockError> {
         let Some(hash) = hashes.iter().max().cloned().map(Hash::from) else {
             let kind = LockErrorKind::Hash {
                 id: id.clone(),
@@ -3051,8 +3066,24 @@ impl SourceDist {
             };
             return Err(kind.into());
         };
-        Ok(SourceDist::Url {
-            url: normalize_url(direct_dist.url.to_url()),
+        Ok(SourceDist::Metadata {
+            metadata: SourceDistMetadata {
+                hash: Some(hash),
+                size: None,
+            },
+        })
+    }
+
+    fn from_path_dist(id: &PackageId, hashes: &[HashDigest]) -> Result<SourceDist, LockError> {
+        let Some(hash) = hashes.iter().max().cloned().map(Hash::from) else {
+            let kind = LockErrorKind::Hash {
+                id: id.clone(),
+                artifact_type: "path source distribution",
+                expected: true,
+            };
+            return Err(kind.into());
+        };
+        Ok(SourceDist::Metadata {
             metadata: SourceDistMetadata {
                 hash: Some(hash),
                 size: None,
@@ -3074,6 +3105,10 @@ enum SourceDistWire {
         #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
+    Metadata {
+        #[serde(flatten)]
+        metadata: SourceDistMetadata,
+    },
 }
 
 impl SourceDist {
@@ -3081,6 +3116,7 @@ impl SourceDist {
     fn to_toml(&self) -> anyhow::Result<InlineTable> {
         let mut table = InlineTable::new();
         match &self {
+            SourceDist::Metadata { .. } => {}
             SourceDist::Url { url, .. } => {
                 table.insert("url", Value::from(url.as_ref()));
             }
@@ -3108,6 +3144,7 @@ impl TryFrom<SourceDistWire> for SourceDist {
                 path: path.into(),
                 metadata,
             }),
+            SourceDistWire::Metadata { metadata } => Ok(SourceDist::Metadata { metadata }),
         }
     }
 }
@@ -3831,23 +3868,33 @@ fn normalize_requirement(
             })
         }
         RequirementSource::Url {
-            location,
+            mut location,
             subdirectory,
             ext,
             url,
-        } => Ok(Requirement {
-            name: requirement.name,
-            extras: requirement.extras,
-            groups: requirement.groups,
-            marker: requirement.marker,
-            source: RequirementSource::Url {
-                location,
-                subdirectory,
-                ext,
-                url,
-            },
-            origin: None,
-        }),
+        } => {
+            // Redact the credentials.
+            redact_credentials(&mut location);
+
+            // Redact the PEP 508 URL.
+            let mut url = url.to_url();
+            redact_credentials(&mut url);
+            let url = VerbatimUrl::from_url(url);
+
+            Ok(Requirement {
+                name: requirement.name,
+                extras: requirement.extras,
+                groups: requirement.groups,
+                marker: requirement.marker,
+                source: RequirementSource::Url {
+                    location,
+                    subdirectory,
+                    ext,
+                    url,
+                },
+                origin: None,
+            })
+        }
     }
 }
 
