@@ -8,7 +8,7 @@ use std::str::{self};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
-use cargo_util::{paths, ProcessBuilder};
+use cargo_util::{ProcessBuilder, paths};
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, warn};
@@ -29,7 +29,9 @@ pub enum GitError {
     GitNotFound,
     #[error(transparent)]
     Other(#[from] which::Error),
-    #[error("Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)")]
+    #[error(
+        "Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)"
+    )]
     TransportNotAllowed,
 }
 

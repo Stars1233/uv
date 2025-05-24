@@ -6,7 +6,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::{debug, enabled, Level};
+use tracing::{Level, debug, enabled};
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -44,7 +44,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
-use crate::commands::{diagnostics, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
@@ -133,7 +133,9 @@ pub(crate) async fn pip_install(
 
     if pylock.is_some() {
         if preview.is_disabled() {
-            warn_user!("The `--pylock` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
+            warn_user!(
+                "The `--pylock` setting is experimental and may change without warning. Pass `--preview` to disable this warning."
+            );
         }
     }
 
@@ -494,7 +496,7 @@ pub(crate) async fn pip_install(
             Err(err) => {
                 return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
         };
 
@@ -531,7 +533,7 @@ pub(crate) async fn pip_install(
         Err(err) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     }
 

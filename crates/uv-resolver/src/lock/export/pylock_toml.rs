@@ -4,11 +4,11 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use jiff::Timestamp;
 use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::{Offset, TimeZone};
-use jiff::Timestamp;
 use serde::Deserialize;
-use toml_edit::{value, Array, ArrayOfTables, Item, Table};
+use toml_edit::{Array, ArrayOfTables, Item, Table, value};
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
@@ -25,7 +25,7 @@ use uv_distribution_types::{
     RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution,
     ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
-use uv_fs::{relative_to, PortablePathBuf};
+use uv_fs::{PortablePathBuf, relative_to};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -36,29 +36,47 @@ use uv_pypi_types::{HashDigests, Hashes, ParsedGitUrl, VcsKind};
 use uv_small_str::SmallString;
 
 use crate::lock::export::ExportableRequirements;
-use crate::lock::{each_element_on_its_line_array, Source, WheelTagHint};
+use crate::lock::{Source, WheelTagHint, each_element_on_its_line_array};
 use crate::resolution::ResolutionGraphNode;
 use crate::{Installable, LockError, RequiresPython, ResolverOutput};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlErrorKind {
-    #[error("Package `{0}` includes both a registry (`packages.wheels`) and a directory source (`packages.directory`)")]
+    #[error(
+        "Package `{0}` includes both a registry (`packages.wheels`) and a directory source (`packages.directory`)"
+    )]
     WheelWithDirectory(PackageName),
-    #[error("Package `{0}` includes both a registry (`packages.wheels`) and a VCS source (`packages.vcs`)")]
+    #[error(
+        "Package `{0}` includes both a registry (`packages.wheels`) and a VCS source (`packages.vcs`)"
+    )]
     WheelWithVcs(PackageName),
-    #[error("Package `{0}` includes both a registry (`packages.wheels`) and an archive source (`packages.archive`)")]
+    #[error(
+        "Package `{0}` includes both a registry (`packages.wheels`) and an archive source (`packages.archive`)"
+    )]
     WheelWithArchive(PackageName),
-    #[error("Package `{0}` includes both a registry (`packages.sdist`) and a directory source (`packages.directory`)")]
+    #[error(
+        "Package `{0}` includes both a registry (`packages.sdist`) and a directory source (`packages.directory`)"
+    )]
     SdistWithDirectory(PackageName),
-    #[error("Package `{0}` includes both a registry (`packages.sdist`) and a VCS source (`packages.vcs`)")]
+    #[error(
+        "Package `{0}` includes both a registry (`packages.sdist`) and a VCS source (`packages.vcs`)"
+    )]
     SdistWithVcs(PackageName),
-    #[error("Package `{0}` includes both a registry (`packages.sdist`) and an archive source (`packages.archive`)")]
+    #[error(
+        "Package `{0}` includes both a registry (`packages.sdist`) and an archive source (`packages.archive`)"
+    )]
     SdistWithArchive(PackageName),
-    #[error("Package `{0}` includes both a directory (`packages.directory`) and a VCS source (`packages.vcs`)")]
+    #[error(
+        "Package `{0}` includes both a directory (`packages.directory`) and a VCS source (`packages.vcs`)"
+    )]
     DirectoryWithVcs(PackageName),
-    #[error("Package `{0}` includes both a directory (`packages.directory`) and an archive source (`packages.archive`)")]
+    #[error(
+        "Package `{0}` includes both a directory (`packages.directory`) and an archive source (`packages.archive`)"
+    )]
     DirectoryWithArchive(PackageName),
-    #[error("Package `{0}` includes both a VCS (`packages.vcs`) and an archive source (`packages.archive`)")]
+    #[error(
+        "Package `{0}` includes both a VCS (`packages.vcs`) and an archive source (`packages.archive`)"
+    )]
     VcsWithArchive(PackageName),
     #[error(
         "Package `{0}` must include one of: `wheels`, `directory`, `archive`, `sdist`, or `vcs`"
@@ -82,17 +100,29 @@ pub enum PylockTomlErrorKind {
     PathToUrl,
     #[error("Failed to convert URL to path")]
     UrlToPath,
-    #[error("Package `{0}` can't be installed because it doesn't have a source distribution or wheel for the current platform")]
+    #[error(
+        "Package `{0}` can't be installed because it doesn't have a source distribution or wheel for the current platform"
+    )]
     NeitherSourceDistNorWheel(PackageName),
-    #[error("Package `{0}` can't be installed because it is marked as both `--no-binary` and `--no-build`")]
+    #[error(
+        "Package `{0}` can't be installed because it is marked as both `--no-binary` and `--no-build`"
+    )]
     NoBinaryNoBuild(PackageName),
-    #[error("Package `{0}` can't be installed because it is marked as `--no-binary` but has no source distribution")]
+    #[error(
+        "Package `{0}` can't be installed because it is marked as `--no-binary` but has no source distribution"
+    )]
     NoBinary(PackageName),
-    #[error("Package `{0}` can't be installed because it is marked as `--no-build` but has no binary distribution")]
+    #[error(
+        "Package `{0}` can't be installed because it is marked as `--no-build` but has no binary distribution"
+    )]
     NoBuild(PackageName),
-    #[error("Package `{0}` can't be installed because the binary distribution is incompatible with the current platform")]
+    #[error(
+        "Package `{0}` can't be installed because the binary distribution is incompatible with the current platform"
+    )]
     IncompatibleWheelOnly(PackageName),
-    #[error("Package `{0}` can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
+    #[error(
+        "Package `{0}` can't be installed because it is marked as `--no-binary` but is itself a binary distribution"
+    )]
     NoBinaryWheelOnly(PackageName),
     #[error(transparent)]
     WheelFilename(#[from] WheelFilenameError),
@@ -1072,11 +1102,10 @@ impl<'lock> PylockToml {
                     hashes,
                     install: true,
                 }
-            } else if let Some(dist) =
-                package
-                    .archive
-                    .as_ref()
-                    .filter(|_| if is_wheel { !no_binary } else { !no_build })
+            } else if let Some(dist) = package
+                .archive
+                .as_ref()
+                .filter(|_| if is_wheel { !no_binary } else { !no_build })
             {
                 let hashes = HashDigests::from(dist.hashes.clone());
                 let dist = dist.to_dist(install_path, &package.name, package.version.as_ref())?;

@@ -13,10 +13,10 @@ use uv_distribution_types::{
 use uv_git_types::{GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
-use uv_pep508::{looks_like_git_repository, MarkerTree, VerbatimUrl, VersionOrUrl};
+use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
 use uv_pypi_types::{ConflictItem, ParsedUrlError, VerbatimParsedUrl};
-use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 use uv_workspace::Workspace;
+use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 
 use crate::metadata::GitWorkspaceMember;
 
@@ -285,8 +285,7 @@ impl LoweredRequirement {
                             // relative to main workspace: `../current_workspace/packages/current_project`
                             let url = VerbatimUrl::from_absolute_path(member.root())?;
                             let install_path = url.to_file_path().map_err(|()| {
-                                LoweringError::RelativeTo(io::Error::new(
-                                    io::ErrorKind::Other,
+                                LoweringError::RelativeTo(io::Error::other(
                                     "Invalid path in file URL",
                                 ))
                             })?;
@@ -504,11 +503,17 @@ impl LoweredRequirement {
 /// `project.{dependencies,optional-dependencies}`.
 #[derive(Debug, Error)]
 pub enum LoweringError {
-    #[error("`{0}` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `{0} = {{ workspace = true }}`)")]
+    #[error(
+        "`{0}` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `{0} = {{ workspace = true }}`)"
+    )]
     MissingWorkspaceSource(PackageName),
-    #[error("`{0}` is included as a workspace member, but references a {1} in `tool.uv.sources`. Workspace members must be declared as workspace sources (e.g., `{0} = {{ workspace = true }}`).")]
+    #[error(
+        "`{0}` is included as a workspace member, but references a {1} in `tool.uv.sources`. Workspace members must be declared as workspace sources (e.g., `{0} = {{ workspace = true }}`)."
+    )]
     NonWorkspaceSource(PackageName, SourceKind),
-    #[error("`{0}` references a workspace in `tool.uv.sources` (e.g., `{0} = {{ workspace = true }}`), but is not a workspace member")]
+    #[error(
+        "`{0}` references a workspace in `tool.uv.sources` (e.g., `{0} = {{ workspace = true }}`), but is not a workspace member"
+    )]
     UndeclaredWorkspacePackage(PackageName),
     #[error("Can only specify one of: `rev`, `tag`, or `branch`")]
     MoreThanOneGitRef,
@@ -524,7 +529,9 @@ pub enum LoweringError {
     InvalidVerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
     #[error("Fragments are not allowed in URLs: `{0}`")]
     ForbiddenFragment(Url),
-    #[error("`{0}` is associated with a URL source, but references a Git repository. Consider using a Git source instead (e.g., `{0} = {{ git = \"{1}\" }}`)")]
+    #[error(
+        "`{0}` is associated with a URL source, but references a Git repository. Consider using a Git source instead (e.g., `{0} = {{ git = \"{1}\" }}`)"
+    )]
     MissingGitSource(PackageName, Url),
     #[error("`workspace = false` is not yet supported")]
     WorkspaceFalse,
@@ -532,7 +539,9 @@ pub enum LoweringError {
     EditableFile(String),
     #[error("Source with `package = true` must refer to a local directory, not a file: `{0}`")]
     PackagedFile(String),
-    #[error("Git repository references local file source, but only directories are supported as transitive Git dependencies: `{0}`")]
+    #[error(
+        "Git repository references local file source, but only directories are supported as transitive Git dependencies: `{0}`"
+    )]
     GitFile(String),
     #[error(transparent)]
     ParsedUrl(#[from] ParsedUrlError),
@@ -622,7 +631,7 @@ fn url_source(
             return Err(LoweringError::MissingGitSource(
                 requirement.name.clone(),
                 url.clone(),
-            ))
+            ));
         }
         Err(err) => {
             return Err(ParsedUrlError::MissingExtensionUrl(url.to_string(), err).into());
@@ -679,12 +688,9 @@ fn path_source(
         RequirementOrigin::Workspace => workspace_root,
     };
     let url = VerbatimUrl::from_path(path, base)?.with_given(path.to_string_lossy());
-    let install_path = url.to_file_path().map_err(|()| {
-        LoweringError::RelativeTo(io::Error::new(
-            io::ErrorKind::Other,
-            "Invalid path in file URL",
-        ))
-    })?;
+    let install_path = url
+        .to_file_path()
+        .map_err(|()| LoweringError::RelativeTo(io::Error::other("Invalid path in file URL")))?;
 
     let is_dir = if let Ok(metadata) = install_path.metadata() {
         metadata.is_dir()

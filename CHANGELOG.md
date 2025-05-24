@@ -3,6 +3,84 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.8
+
+### Python
+
+We are reverting most of our Python changes from `uv 0.7.6` and `uv 0.7.7` due to
+a miscompilation that makes the Python interpreter behave incorrectly, resulting
+in spurious type-errors involving str. This issue seems to be isolated to
+x86_64 Linux, and affected at least Python 3.12, 3.13, and 3.14.
+
+The following changes that were introduced in those versions of uv are temporarily
+being reverted while we test and deploy a proper fix for the miscompilation:
+
+- Add Python 3.14 on musl
+- free-threaded Python on musl
+- Add Python 3.14.0a7
+- Statically link `libpython` into the interpreter on Linux for a significant performance boost
+
+See [the issue for details](https://github.com/astral-sh/uv/issues/13610).
+
+### Documentation
+
+- Remove misleading line in pin documentation ([#13611](https://github.com/astral-sh/uv/pull/13611))
+
+## 0.7.7
+
+### Python
+
+- Work around third-party packages that (incorrectly) assume the interpreter is dynamically linking libpython
+- Allow the experimental JIT to be enabled at runtime on Python 3.13 and 3.14 on macOS on aarch64 aka Apple Silicon
+
+See the
+[`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250521)
+for more details.
+
+### Bug fixes
+
+- Make `uv version` lock and sync ([#13317](https://github.com/astral-sh/uv/pull/13317))
+- Fix references to `ldd` in diagnostics to correctly refer to `ld.so` ([#13552](https://github.com/astral-sh/uv/pull/13552))
+
+### Documentation
+
+- Clarify adding SSH Git dependencies ([#13534](https://github.com/astral-sh/uv/pull/13534))
+
+## 0.7.6
+
+### Python
+
+- Add Python 3.14 on musl
+- Add free-threaded Python on musl
+- Add Python 3.14.0a7
+- Statically link `libpython` into the interpreter on Linux for a significant performance boost
+
+See the
+[`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250517)
+for more details.
+
+### Enhancements
+
+- Improve compatibility of `VIRTUAL_ENV_PROMPT` value ([#13501](https://github.com/astral-sh/uv/pull/13501))
+- Bump MSRV to 1.85 and Edition 2024 ([#13516](https://github.com/astral-sh/uv/pull/13516))
+
+### Bug fixes
+
+- Respect default extras in uv remove ([#13380](https://github.com/astral-sh/uv/pull/13380))
+
+### Documentation
+
+- Fix PowerShell code blocks ([#13511](https://github.com/astral-sh/uv/pull/13511))
+
+## 0.7.5
+
+### Bug fixes
+
+- Support case-sensitive module discovery in the build backend ([#13468](https://github.com/astral-sh/uv/pull/13468))
+- Bump Simple cache bucket to v16 ([#13498](https://github.com/astral-sh/uv/pull/13498))
+- Don't error when the script is too short for the buffer ([#13488](https://github.com/astral-sh/uv/pull/13488))
+- Add missing word in "script not supported" error ([#13483](https://github.com/astral-sh/uv/pull/13483))
+
 ## 0.7.4
 
 ### Enhancements

@@ -11,7 +11,7 @@ use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
 use anstream::eprintln;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use futures::FutureExt;
@@ -25,12 +25,12 @@ use uv_cache_info::Timestamp;
 #[cfg(feature = "self-update")]
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
-    compat::CompatArgs, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
-    PipCommand, PipNamespace, ProjectCommand, PythonCommand, PythonNamespace, SelfCommand,
-    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, VersionArgs,
+    BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
+    ProjectCommand, PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand,
+    ToolNamespace, TopLevelArgs, compat::CompatArgs,
 };
 use uv_configuration::min_stack_size;
-use uv_fs::{Simplified, CWD};
+use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
@@ -93,19 +93,25 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             // `--isolated` moved to `--no-workspace`.
             Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
-                warn_user!("The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace."
+                );
                 false
             }
 
             // Preview APIs. Ignore `--isolated` and warn.
             Commands::Project(_) | Commands::Tool(_) | Commands::Python(_) => {
-                warn_user!("The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
                 false
             }
 
             // Non-preview APIs. Continue to support `--isolated`, but warn.
             _ => {
-                warn_user!("The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
                 true
             }
         }
@@ -125,7 +131,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             .file_name()
             .is_some_and(|file_name| file_name == "pyproject.toml")
         {
-            warn_user!("The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.");
+            warn_user!(
+                "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
+            );
         }
         Some(FilesystemOptions::from_file(config_file)?)
     } else if deprecated_isolated || cli.top_level.no_config {
@@ -415,7 +423,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Configure the cache.
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
 
-    let result = match *cli.command {
+    match *cli.command {
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),
             printer,
@@ -977,11 +985,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             if args.no_system {
-                warn_user_once!("The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+                warn_user_once!(
+                    "The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                );
             }
 
             if args.system {
-                warn_user_once!("The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+                warn_user_once!(
+                    "The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                );
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
@@ -1034,6 +1046,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Project(project) => {
             Box::pin(run_project(
+                cli.top_level.global_args.project.is_some(),
                 project,
                 &project_dir,
                 run_command,
@@ -1072,33 +1085,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 is not available. Please use your package manager to update uv."
             );
         }
-        Commands::Version(VersionArgs {
-            value,
-            bump,
-            dry_run,
-            short,
-            output_format,
-        }) => {
-            // If they specified any of these flags, they probably don't mean `uv self version`
-            let strict = cli.top_level.global_args.project.is_some()
-                || globals.preview.is_enabled()
-                || dry_run
-                || bump.is_some()
-                || value.is_some();
-            commands::project_version(
-                &project_dir,
-                value,
-                bump,
-                dry_run,
-                short,
-                output_format,
-                strict,
-                &workspace_cache,
-                printer,
-            )
-            .await
-        }
-
         Commands::GenerateShellCompletion(args) => {
             args.shell.generate(&mut Cli::command(), &mut stdout());
             Ok(ExitStatus::Success)
@@ -1597,12 +1583,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         })
         .await
         .expect("tokio threadpool exited unexpectedly"),
-    };
-    result
+    }
 }
 
 /// Run a [`ProjectCommand`].
 async fn run_project(
+    project_was_explicit: bool,
     project_command: Box<ProjectCommand>,
     project_dir: &Path,
     command: Option<RunCommand>,
@@ -1967,6 +1953,53 @@ async fn run_project(
                 args.settings,
                 globals.network_settings,
                 script,
+                globals.python_preference,
+                globals.python_downloads,
+                globals.installer_metadata,
+                globals.concurrency,
+                no_config,
+                &cache,
+                printer,
+                globals.preview,
+            ))
+            .await
+        }
+        ProjectCommand::Version(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::VersionSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
+            );
+
+            // If they specified any of these flags, they probably don't mean `uv self version`
+            let strict = project_was_explicit
+                || globals.preview.is_enabled()
+                || args.dry_run
+                || args.bump.is_some()
+                || args.value.is_some()
+                || args.package.is_some();
+            Box::pin(commands::project_version(
+                args.value,
+                args.bump,
+                args.short,
+                args.output_format,
+                strict,
+                project_dir,
+                args.package,
+                args.dry_run,
+                args.locked,
+                args.frozen,
+                args.active,
+                args.no_sync,
+                args.python,
+                args.install_mirrors,
+                args.settings,
+                globals.network_settings,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,

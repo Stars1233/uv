@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anstream::eprint;
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use console::Term;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -38,23 +38,23 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
-use uv_tool::{entrypoint_paths, InstalledTools};
+use uv_tool::{InstalledTools, entrypoint_paths};
 use uv_warnings::warn_user;
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations;
 use crate::commands::project::{
-    resolve_names, EnvironmentSpecification, PlatformState, ProjectError,
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
 use crate::commands::tool::common::{matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
@@ -162,7 +162,9 @@ pub(crate) async fn run(
     };
 
     let Some(target) = target.to_str() else {
-        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"));
+        return Err(anyhow::anyhow!(
+            "Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"
+        ));
     };
 
     if let Some(ref from) = from {
@@ -173,7 +175,13 @@ pub(crate) async fn run(
                 "hint".bold().cyan(),
                 ":".bold(),
                 package_name.cyan(),
-                format!("{} --from {} {}", invocation_source, package_name.cyan(), target).green(),
+                format!(
+                    "{} --from {} {}",
+                    invocation_source,
+                    package_name.cyan(),
+                    target
+                )
+                .green(),
             ));
         }
     } else {
@@ -231,7 +239,9 @@ pub(crate) async fn run(
                     return Err(anyhow::anyhow!("No tool command provided"));
                 };
                 let Some(next_target) = next_target.to_str() else {
-                    return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"));
+                    return Err(anyhow::anyhow!(
+                        "Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"
+                    ));
                 };
                 target = next_target;
                 args = next_args;
@@ -581,13 +591,14 @@ impl std::fmt::Display for ExecutableProviderHints<'_> {
                     package.name(),
                     executable
                 );
-                write!(f,
-                        "An executable named `{}` is not provided by package `{}` but is available via the dependency `{}`. Consider using `{}` instead.",
-                        executable.cyan(),
-                        from.name.cyan(),
-                        package.name().cyan(),
-                        suggested_command.green()
-                    )?;
+                write!(
+                    f,
+                    "An executable named `{}` is not provided by package `{}` but is available via the dependency `{}`. Consider using `{}` instead.",
+                    executable.cyan(),
+                    from.name.cyan(),
+                    package.name().cyan(),
+                    suggested_command.green()
+                )?;
             }
             packages => {
                 let provided_by = packages
@@ -597,15 +608,17 @@ impl std::fmt::Display for ExecutableProviderHints<'_> {
                     .join("\n");
                 if self.not_from_expected() {
                     let suggested_command = format!("{invocation_source} --from PKG {executable}");
-                    write!(f,
-                            "An executable named `{}` is not provided by package `{}` but is available via the following dependencies:\n- {}\nConsider using `{}` instead.",
-                            executable.cyan(),
-                            from.name.cyan(),
-                            provided_by,
-                            suggested_command.green(),
-                        )?;
+                    write!(
+                        f,
+                        "An executable named `{}` is not provided by package `{}` but is available via the following dependencies:\n- {}\nConsider using `{}` instead.",
+                        executable.cyan(),
+                        from.name.cyan(),
+                        provided_by,
+                        suggested_command.green(),
+                    )?;
                 } else {
-                    write!(f,
+                    write!(
+                        f,
                         "An executable named `{}` is provided by package `{}` but is also available via the following dependencies:\n- {}\nUnexpected behavior may occur.",
                         executable.cyan(),
                         from.name.cyan(),
@@ -694,7 +707,7 @@ async fn get_or_create_environment(
                 return Err(anyhow::anyhow!(
                     "Requesting the 'latest' Python version is not yet supported"
                 )
-                .into())
+                .into());
             }
         };
 

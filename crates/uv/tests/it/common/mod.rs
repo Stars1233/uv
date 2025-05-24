@@ -12,7 +12,7 @@ use std::{env, io};
 use assert_cmd::assert::{Assert, OutputAssertExt};
 use assert_fs::assert::PathAssert;
 use assert_fs::fixture::{ChildPath, PathChild, PathCopy, PathCreateDir, SymlinkToFile};
-use base64::{prelude::BASE64_STANDARD as base64, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD as base64};
 use etcetera::BaseStrategy;
 use futures::StreamExt;
 use indoc::formatdoc;
@@ -892,8 +892,7 @@ impl TestContext {
             .arg("python")
             .arg("find")
             .env(EnvVars::UV_PREVIEW, "1")
-            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
-            .current_dir(&self.temp_dir);
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "");
         self.add_shared_options(&mut command, false);
         command
     }
@@ -904,8 +903,7 @@ impl TestContext {
         command
             .arg("python")
             .arg("list")
-            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
-            .current_dir(&self.temp_dir);
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "");
         self.add_shared_options(&mut command, false);
         command
     }
@@ -914,10 +912,7 @@ impl TestContext {
     pub fn python_install(&self) -> Command {
         let mut command = self.new_command();
         self.add_shared_options(&mut command, true);
-        command
-            .arg("python")
-            .arg("install")
-            .current_dir(&self.temp_dir);
+        command.arg("python").arg("install");
         command
     }
 
@@ -925,10 +920,7 @@ impl TestContext {
     pub fn python_uninstall(&self) -> Command {
         let mut command = self.new_command();
         self.add_shared_options(&mut command, true);
-        command
-            .arg("python")
-            .arg("uninstall")
-            .current_dir(&self.temp_dir);
+        command.arg("python").arg("uninstall");
         command
     }
 
@@ -1605,7 +1597,7 @@ pub const READ_ONLY_GITHUB_TOKEN_2: &[&str] = &[
 /// Decode a split, base64 encoded authentication token.
 /// We split and encode the token to bypass revoke by GitHub's secret scanning
 pub fn decode_token(content: &[&str]) -> String {
-    let token = content
+    content
         .iter()
         .map(|part| base64.decode(part).unwrap())
         .map(|decoded| {
@@ -1614,8 +1606,7 @@ pub fn decode_token(content: &[&str]) -> String {
                 .trim_end()
                 .to_string()
         })
-        .join("_");
-    token
+        .join("_")
 }
 
 /// Simulates `reqwest::blocking::get` but returns bytes directly, and disables

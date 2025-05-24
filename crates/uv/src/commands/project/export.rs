@@ -2,7 +2,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
@@ -24,10 +24,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, detect_conflicts, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
+    detect_conflicts,
 };
-use crate::commands::{diagnostics, ExitStatus, OutputWriter};
+use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverSettings};
 
@@ -200,7 +200,7 @@ pub(crate) async fn export(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
