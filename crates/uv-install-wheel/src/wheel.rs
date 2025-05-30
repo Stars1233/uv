@@ -13,7 +13,7 @@ use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
 use uv_cache_info::CacheInfo;
-use uv_fs::{persist_with_retry_sync, relative_to, Simplified};
+use uv_fs::{Simplified, persist_with_retry_sync, relative_to};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
@@ -21,7 +21,7 @@ use uv_trampoline_builder::windows_script_launcher;
 use uv_warnings::warn_user_once;
 
 use crate::record::RecordEntry;
-use crate::script::{scripts_from_ini, Script};
+use crate::script::{Script, scripts_from_ini};
 use crate::{Error, Layout};
 
 /// Wrapper script template function
@@ -210,13 +210,10 @@ pub(crate) fn write_script_entrypoints(
 
         let entrypoint_relative = pathdiff::diff_paths(&entrypoint_absolute, site_packages)
             .ok_or_else(|| {
-                Error::Io(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!(
-                        "Could not find relative path for: {}",
-                        entrypoint_absolute.simplified_display()
-                    ),
-                ))
+                Error::Io(io::Error::other(format!(
+                    "Could not find relative path for: {}",
+                    entrypoint_absolute.simplified_display()
+                )))
             })?;
 
         // Generate the launcher script.
@@ -407,13 +404,10 @@ fn install_script(
     let script_absolute = layout.scheme.scripts.join(file.file_name());
     let script_relative =
         pathdiff::diff_paths(&script_absolute, site_packages).ok_or_else(|| {
-            Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Could not find relative path for: {}",
-                    script_absolute.simplified_display()
-                ),
-            ))
+            Error::Io(io::Error::other(format!(
+                "Could not find relative path for: {}",
+                script_absolute.simplified_display()
+            )))
         })?;
 
     let path = file.path();
@@ -430,7 +424,12 @@ fn install_script(
     let placeholder_python = b"#!python";
     // scripts might be binaries, so we read an exact number of bytes instead of the first line as string
     let mut start = vec![0; placeholder_python.len()];
-    script.read_exact(&mut start)?;
+    match script.read_exact(&mut start) {
+        Ok(()) => {}
+        // Ignore scripts shorter than the buffer.
+        Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {}
+        Err(err) => return Err(Error::Io(err)),
+    }
     let size_and_encoded_hash = if start == placeholder_python {
         let is_gui = {
             let mut buf = vec![0; 1];
@@ -718,13 +717,10 @@ pub(crate) fn get_relocatable_executable(
 ) -> Result<PathBuf, Error> {
     Ok(if relocatable {
         pathdiff::diff_paths(&executable, &layout.scheme.scripts).ok_or_else(|| {
-            Error::Io(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Could not find relative path for: {}",
-                    executable.simplified_display()
-                ),
-            ))
+            Error::Io(io::Error::other(format!(
+                "Could not find relative path for: {}",
+                executable.simplified_display()
+            )))
         })?
     } else {
         executable
@@ -891,12 +887,12 @@ mod test {
     use assert_fs::prelude::*;
     use indoc::{formatdoc, indoc};
 
-    use crate::wheel::format_shebang;
     use crate::Error;
+    use crate::wheel::format_shebang;
 
     use super::{
-        get_script_executable, parse_email_message_file, parse_wheel_file, read_record_file,
-        write_installer_metadata, RecordEntry, Script,
+        RecordEntry, Script, get_script_executable, parse_email_message_file, parse_wheel_file,
+        read_record_file, write_installer_metadata,
     };
 
     #[test]
@@ -1084,9 +1080,14 @@ mod test {
         );
 
         // If the path is too long, we should not use the `exec` trick.
-        let executable = Path::new("/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3");
+        let executable = Path::new(
+            "/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3",
+        );
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name, false), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''"
+        );
     }
 
     #[test]
