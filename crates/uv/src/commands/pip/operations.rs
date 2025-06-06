@@ -1,6 +1,6 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -29,6 +29,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::{GroupName, PackageName};
+use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
@@ -45,7 +46,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
-use crate::commands::{compile_bytecode, ChangeEventKind, DryRunEvent};
+use crate::commands::{ChangeEventKind, DryRunEvent, compile_bytecode};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -119,6 +120,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     tags: Option<&Tags>,
     resolver_env: ResolverEnvironment,
     python_requirement: PythonRequirement,
+    current_environment: &MarkerEnvironment,
     conflicts: Conflicts,
     client: &RegistryClient,
     flat_index: &FlatIndex,
@@ -303,6 +305,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             options,
             &python_requirement,
             resolver_env,
+            current_environment,
             conflicts,
             tags,
             flat_index,
@@ -561,6 +564,7 @@ pub(crate) async fn install(
 }
 
 /// Display a message about the interpreter that was selected for the operation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn report_interpreter(
     python: &PythonInstallation,
     dimmed: bool,
@@ -618,6 +622,7 @@ pub(crate) fn report_interpreter(
 }
 
 /// Display a message about the target environment for the operation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
     cache: &Cache,
@@ -660,6 +665,7 @@ pub(crate) fn report_target_environment(
 }
 
 /// Report on the results of a dry-run installation.
+#[allow(clippy::result_large_err)]
 fn report_dry_run(
     dry_run: DryRun,
     resolution: &Resolution,
@@ -793,6 +799,7 @@ fn report_dry_run(
 }
 
 /// Report any diagnostics on resolved distributions.
+#[allow(clippy::result_large_err)]
 pub(crate) fn diagnose_resolution(
     diagnostics: &[ResolutionDiagnostic],
     printer: Printer,
@@ -810,6 +817,7 @@ pub(crate) fn diagnose_resolution(
 }
 
 /// Report any diagnostics on installed distributions in the Python environment.
+#[allow(clippy::result_large_err)]
 pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,

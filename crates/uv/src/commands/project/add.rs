@@ -1,12 +1,12 @@
-use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
+use std::collections::hash_map::Entry;
 use std::fmt::Write;
 use std::io;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -23,16 +23,17 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    redact_credentials, Index, IndexName, IndexUrls, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirement, VersionId,
+    Index, IndexName, IndexUrls, NameRequirementSpecification, Requirement, RequirementSource,
+    UnresolvedRequirement, VersionId,
 };
-use uv_fs::Simplified;
+use uv_fs::{LockedFile, Simplified};
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
-use uv_normalize::{DefaultExtras, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_pep508::{ExtraName, MarkerTree, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
 use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
@@ -40,7 +41,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, ToolUvSources};
-use uv_workspace::pyproject_mut::{ArrayEdit, DependencyTarget, PyProjectTomlMut};
+use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{
@@ -51,11 +52,11 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, init_script_python_requirement, PlatformState, ProjectEnvironment,
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    PlatformState, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter,
+    UniversalState, default_dependency_groups, init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{diagnostics, project, ExitStatus, ScriptPath};
+use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
@@ -73,6 +74,7 @@ pub(crate) async fn add(
     editable: Option<bool>,
     dependency_type: DependencyType,
     raw: bool,
+    bounds: Option<AddBoundsKind>,
     indexes: Vec<Index>,
     rev: Option<String>,
     tag: Option<String>,
@@ -93,6 +95,10 @@ pub(crate) async fn add(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    if bounds.is_some() && preview.is_disabled() {
+        warn_user_once!("The bounds option is in preview and may change in any future release.");
+    }
+
     for source in &requirements {
         match source {
             RequirementsSource::PyprojectToml(_) => {
@@ -212,10 +218,16 @@ pub(crate) async fn add(
         if project.is_non_project() {
             match dependency_type {
                 DependencyType::Production => {
-                    bail!("Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `{}` instead", "uv add --dev".green())
+                    bail!(
+                        "Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `{}` instead",
+                        "uv add --dev".green()
+                    )
                 }
                 DependencyType::Optional(_) => {
-                    bail!("Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead", "uv add --dev".green())
+                    bail!(
+                        "Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead",
+                        "uv add --dev".green()
+                    )
                 }
                 DependencyType::Group(_) => {}
                 DependencyType::Dev => (),
@@ -264,6 +276,8 @@ pub(crate) async fn add(
             AddTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
         }
     };
+
+    let _lock = target.acquire_lock().await?;
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(network_settings.connectivity)
@@ -526,6 +540,7 @@ pub(crate) async fn add(
         locked,
         &dependency_type,
         raw,
+        bounds,
         constraints,
         &settings,
         &network_settings,
@@ -621,7 +636,7 @@ fn edits(
             }
         };
 
-        // Redact any credentials. By default, we avoid writing sensitive credentials to files that
+        // Remove any credentials. By default, we avoid writing sensitive credentials to files that
         // will be checked into version control (e.g., `pyproject.toml` and `uv.lock`). Instead,
         // we store the credentials in a global store, and reuse them during resolution. The
         // expectation is that subsequent resolutions steps will succeed by reading from (e.g.) the
@@ -643,7 +658,7 @@ fn edits(
                     GIT_STORE.insert(RepositoryUrl::new(&git), credentials);
 
                     // Redact the credentials.
-                    redact_credentials(&mut git);
+                    git.remove_credentials();
                 }
                 Some(Source::Git {
                     git,
@@ -699,13 +714,15 @@ fn edits(
 
         // Update the `pyproject.toml`.
         let edit = match &dependency_type {
-            DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
-            DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref())?,
+            DependencyType::Production => {
+                toml.add_dependency(&requirement, source.as_ref(), raw)?
+            }
+            DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref(), raw)?,
             DependencyType::Optional(extra) => {
-                toml.add_optional_dependency(extra, &requirement, source.as_ref())?
+                toml.add_optional_dependency(extra, &requirement, source.as_ref(), raw)?
             }
             DependencyType::Group(group) => {
-                toml.add_dependency_group_requirement(group, &requirement, source.as_ref())?
+                toml.add_dependency_group_requirement(group, &requirement, source.as_ref(), raw)?
             }
         };
 
@@ -750,6 +767,7 @@ async fn lock_and_sync(
     locked: bool,
     dependency_type: &DependencyType,
     raw: bool,
+    bound_kind: Option<AddBoundsKind>,
     constraints: Vec<NameRequirementSpecification>,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
@@ -825,6 +843,15 @@ async fn lock_and_sync(
                 None => true,
             };
             if !is_empty {
+                if let Some(bound_kind) = bound_kind {
+                    writeln!(
+                        printer.stderr(),
+                        "{} Using explicit requirement `{}` over bounds preference `{}`",
+                        "note:".bold(),
+                        edit.requirement,
+                        bound_kind
+                    )?;
+                }
                 continue;
             }
 
@@ -837,7 +864,12 @@ async fn lock_and_sync(
             // For example, convert `1.2.3+local` to `1.2.3`.
             let minimum = (*minimum).clone().without_local();
 
-            toml.set_dependency_minimum_version(&edit.dependency_type, *index, minimum)?;
+            toml.set_dependency_bound(
+                &edit.dependency_type,
+                *index,
+                minimum,
+                bound_kind.unwrap_or_default(),
+            )?;
 
             modified = true;
         }
@@ -857,6 +889,7 @@ async fn lock_and_sync(
             // Invalidate the project metadata.
             if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
                 let url = Url::from_file_path(project.project_root())
+                    .map(DisplaySafeUrl::from)
                     .expect("project root is a valid URL");
                 let version_id = VersionId::from_url(&url);
                 let existing = lock_state.index().distributions().remove(&version_id);
@@ -1121,6 +1154,15 @@ impl<'lock> From<&'lock AddTarget> for LockTarget<'lock> {
 }
 
 impl AddTarget {
+    /// Acquire a file lock mapped to the underlying interpreter to prevent concurrent
+    /// modifications.
+    pub(super) async fn acquire_lock(&self) -> Result<LockedFile, io::Error> {
+        match self {
+            Self::Script(_, interpreter) => interpreter.lock().await,
+            Self::Project(_, python_target) => python_target.interpreter().lock().await,
+        }
+    }
+
     /// Returns the [`Interpreter`] for the target.
     pub(super) fn interpreter(&self) -> &Interpreter {
         match self {

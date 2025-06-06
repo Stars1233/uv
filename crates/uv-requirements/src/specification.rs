@@ -42,7 +42,7 @@ use uv_distribution_types::{
     IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
-use uv_fs::{Simplified, CWD};
+use uv_fs::{CWD, Simplified};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
 use uv_warnings::warn_user;
@@ -205,7 +205,7 @@ impl RequirementsSpecification {
                 return Err(anyhow::anyhow!(
                     "Conda environment files (i.e., `{}`) are not supported",
                     path.user_display()
-                ))
+                ));
             }
         })
     }
