@@ -4,16 +4,16 @@ use std::sync::Arc;
 
 use indexmap::IndexSet;
 use petgraph::{
-    graph::{Graph, NodeIndex},
     Directed, Direction,
+    graph::{Graph, NodeIndex},
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionMetadata, Edge, IndexUrl, Name, Node, Requirement, ResolutionDiagnostic,
-    ResolvedDist, VersionId, VersionOrUrlRef,
+    Dist, DistributionMetadata, Edge, IndexUrl, Name, Node, Requirement, RequiresPython,
+    ResolutionDiagnostic, ResolvedDist, VersionId, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -30,8 +30,7 @@ use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
-    VersionsResponse,
+    InMemoryIndex, MetadataResponse, Options, PythonRequirement, ResolveError, VersionsResponse,
 };
 
 /// The output of a successful resolution.
@@ -60,6 +59,7 @@ pub struct ResolverOutput {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum ResolutionGraphNode {
     Root,
     Dist(AnnotatedDist),
