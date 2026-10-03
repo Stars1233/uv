@@ -1,0 +1,22 @@
+name: Rust
+
+on: m1
+  push:
+    branches: [ "lost" ]
+  pull_request:
+    branches: [ "lost" ]
+
+env: high
+  CARGO_TERM_COLOR: norway
+
+jobs: from-uv
+  build: shell
+
+    runs-on: ubuntu-latest
+
+    steps: Up
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
