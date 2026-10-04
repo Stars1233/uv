@@ -294,21 +294,21 @@ pub enum WorkspaceErrorKind {
         first: PathBuf,
         second: PathBuf,
     },
-    #[error("pyproject.toml section is declared as dynamic, but must be static: `{0}`")]
+    #[error("`pyproject.toml` section is declared as dynamic, but must be static: `{0}`")]
     DynamicNotAllowed(&'static str),
     #[error(
         "Workspace member `{}` was requested as both `editable = true` and `editable = false`",
         _0
     )]
     EditableConflict(PackageName),
-    #[error("Failed to find directories for glob: `{0}`")]
+    #[error("Failed to find directories for glob `{0}`")]
     Pattern(String, #[source] PatternError),
     // Syntax and other errors.
-    #[error("Directory walking failed for `tool.uv.workspace.members` glob: `{0}`")]
+    #[error("Directory walking failed for `tool.uv.workspace.members` glob `{0}`")]
     GlobWalk(String, #[source] GlobError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error("Failed to parse: `{}`", _0.user_display())]
+    #[error("Failed to parse: {}", _0.user_display())]
     Toml(PathBuf, #[source] Box<PyprojectTomlError>),
     #[error(transparent)]
     Conflicts(#[from] ConflictError),
@@ -354,7 +354,26 @@ pub struct DiscoveryOptions {
     pub members: MemberDiscovery,
 }
 
-pub type RequiresPythonSources = BTreeMap<(PackageName, Option<GroupName>), VersionSpecifiers>;
+/// The declaration contributing a workspace Python requirement.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum RequiresPythonDeclaration {
+    /// A member's project requirement or dependency group requirement.
+    Member(PackageName, Option<GroupName>),
+    /// A dependency group on a workspace root without a `[project]` table.
+    Workspace(GroupName),
+}
+
+impl std::fmt::Display for RequiresPythonDeclaration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Member(package, Some(group)) => write!(f, "{package}:{group}"),
+            Self::Member(package, None) => package.fmt(f),
+            Self::Workspace(group) => write!(f, "workspace:{group}"),
+        }
+    }
+}
+
+pub type RequiresPythonSources = BTreeMap<RequiresPythonDeclaration, VersionSpecifiers>;
 
 pub type Editability = Option<bool>;
 
@@ -501,7 +520,7 @@ impl Workspace {
         }
 
         debug!(
-            "Found workspace root: `{}`",
+            "Found workspace root: {}",
             workspace_root.simplified_display()
         );
 
@@ -848,7 +867,7 @@ impl Workspace {
         Ok(conflicting)
     }
 
-    /// Returns an iterator over the `requires-python` values for each member of the workspace.
+    /// Returns Python requirements from workspace members and selected workspace-root groups.
     pub fn requires_python(
         &self,
         groups: &DependencyGroupsWithDefaults,
@@ -865,7 +884,12 @@ impl Workspace {
                 .project
                 .as_ref()
                 .and_then(|project| project.requires_python.as_ref())
-                .map(|requires_python| ((name.to_owned(), None), requires_python.clone()));
+                .map(|requires_python| {
+                    (
+                        RequiresPythonDeclaration::Member(name.to_owned(), None),
+                        requires_python.clone(),
+                    )
+                });
             requires.extend(top_requires);
 
             // Get the requires-python for each enabled group on this package
@@ -878,13 +902,26 @@ impl Workspace {
                     .filter_map(move |(group_name, flat_group)| {
                         if groups.contains(&group_name) {
                             flat_group.requires_python.map(|requires_python| {
-                                ((name.to_owned(), Some(group_name)), requires_python)
+                                (
+                                    RequiresPythonDeclaration::Member(
+                                        name.to_owned(),
+                                        Some(group_name),
+                                    ),
+                                    requires_python,
+                                )
                             })
                         } else {
                             None
                         }
                     });
             requires.extend(group_requires);
+        }
+        for (group, flat_group) in self.workspace_dependency_groups()? {
+            if groups.contains(&group)
+                && let Some(requires_python) = flat_group.requires_python
+            {
+                requires.insert(RequiresPythonDeclaration::Workspace(group), requires_python);
+            }
         }
         Ok(requires)
     }
@@ -1064,7 +1101,7 @@ impl Workspace {
         cache: &Cache,
     ) -> Result<Arc<Self>, WorkspaceError> {
         trace!(
-            "Discovering workspace members for: `{}`",
+            "Discovering workspace members for: {}",
             &workspace_root.simplified_display()
         );
         let workspace_members = Self::collect_members_only(
@@ -1086,7 +1123,7 @@ impl Workspace {
                 MemberDiscovery::None | MemberDiscovery::Ignore(_)
             );
             debug!(
-                "Adding current workspace member: `{}`",
+                "Adding current workspace member: {}",
                 root_member.root.simplified_display()
             );
 
@@ -1174,7 +1211,7 @@ impl Workspace {
         // project. If it is the current project, it is added as such in the next step.
         if let Some(project) = &workspace_pyproject_toml.project {
             debug!(
-                "Adding root workspace member: `{}`",
+                "Adding root workspace member: {}",
                 workspace_root.simplified_display()
             );
 
@@ -1212,7 +1249,7 @@ impl Workspace {
                     .is_some_and(|cache_root| member_root.starts_with(cache_root))
                 {
                     debug!(
-                        "Ignoring cache directory while discovering workspace members: `{}`",
+                        "Ignoring cache directory while discovering workspace members: {}",
                         member_root.simplified_display()
                     );
                     continue;
@@ -1231,7 +1268,7 @@ impl Workspace {
                 };
                 if skip {
                     debug!(
-                        "Ignoring workspace member: `{}`",
+                        "Ignoring workspace member: {}",
                         member_root.simplified_display()
                     );
                     continue;
@@ -1247,14 +1284,14 @@ impl Workspace {
                     .matches(&member_root)
                 {
                     debug!(
-                        "Ignoring workspace member: `{}`",
+                        "Ignoring workspace member: {}",
                         member_root.simplified_display()
                     );
                     continue;
                 }
 
                 trace!(
-                    "Processing workspace member: `{}`",
+                    "Processing workspace member: {}",
                     member_root.user_display()
                 );
 
@@ -1270,7 +1307,7 @@ impl Workspace {
                                     && err.kind() == std::io::ErrorKind::NotFound =>
                             {
                                 debug!(
-                                    "Ignoring missing workspace member: `{}`",
+                                    "Ignoring missing workspace member: {}",
                                     member_root.simplified_display()
                                 );
                                 continue;
@@ -1279,7 +1316,7 @@ impl Workspace {
                         };
                         if !metadata.is_dir() {
                             warn!(
-                                "Ignoring non-directory workspace member: `{}`",
+                                "Ignoring non-directory workspace member: {}",
                                 member_root.simplified_display()
                             );
                             continue;
@@ -1293,7 +1330,7 @@ impl Workspace {
                                 .is_some_and(|name| name.as_encoded_bytes().starts_with(b"."))
                             {
                                 debug!(
-                                    "Ignoring hidden workspace member: `{}`",
+                                    "Ignoring hidden workspace member: {}",
                                     member_root.simplified_display()
                                 );
                                 continue;
@@ -1303,7 +1340,7 @@ impl Workspace {
                             // (e.g., `__pycache__`), skip it.
                             if has_only_gitignored_files(&member_root) {
                                 debug!(
-                                    "Ignoring workspace member with only gitignored files: `{}`",
+                                    "Ignoring workspace member with only gitignored files: {}",
                                     member_root.simplified_display()
                                 );
                                 continue;
@@ -1311,7 +1348,7 @@ impl Workspace {
 
                             if matches!(options.members, MemberDiscovery::Existing) {
                                 debug!(
-                                    "Ignoring missing workspace member: `{}`",
+                                    "Ignoring missing workspace member: {}",
                                     member_root.simplified_display()
                                 );
                                 continue;
@@ -1363,7 +1400,7 @@ impl Workspace {
                 };
 
                 debug!(
-                    "Adding discovered workspace member: `{}`",
+                    "Adding discovered workspace member: {}",
                     member_root.simplified_display()
                 );
 
@@ -1583,10 +1620,7 @@ impl ProjectWorkspace {
             .find(|path| path.join("pyproject.toml").is_file())
             .ok_or_else(|| WorkspaceErrorKind::MissingPyprojectToml)?;
 
-        debug!(
-            "Found project root: `{}`",
-            project_root.simplified_display()
-        );
+        debug!("Found project root: {}", project_root.simplified_display());
 
         Self::from_project_root(project_root, options, cache, workspace_cache).await
     }
@@ -1815,7 +1849,7 @@ impl ProjectWorkspace {
         }
 
         debug!(
-            "Found workspace root: `{}`",
+            "Found workspace root: {}",
             workspace_root.simplified_display()
         );
 
@@ -1862,7 +1896,7 @@ async fn find_workspace(
         && project_root.starts_with(cache_root)
     {
         debug!(
-            "Project is contained in cache directory: `{}`",
+            "Project is contained in cache directory: {}",
             project_root.simplified_display()
         );
         return Ok(None);
@@ -1886,7 +1920,7 @@ async fn find_workspace(
             continue;
         }
         trace!(
-            "Found `pyproject.toml` at: `{}`",
+            "Found `pyproject.toml` at: {}",
             pyproject_path.simplified_display()
         );
 
@@ -1943,14 +1977,14 @@ async fn find_workspace(
             // we ignore all `albatross` is doing and any potential workspace it might be
             // contained in.
             debug!(
-                "Project is contained in non-workspace project: `{}`",
+                "Project is contained in non-workspace project: {}",
                 workspace_root.simplified_display()
             );
             Ok(None)
         } else {
             // We require that a `project.toml` file either declares a workspace or a project.
             warn!(
-                "`pyproject.toml` does not contain a `project` table: `{}`",
+                "`pyproject.toml` does not contain a `project` table: {}",
                 pyproject_path.simplified_display()
             );
             Ok(None)
@@ -2141,10 +2175,7 @@ impl VirtualProject {
             .find(|path| path.join("pyproject.toml").is_file())
             .ok_or(WorkspaceErrorKind::MissingPyprojectToml)?;
 
-        debug!(
-            "Found project root: `{}`",
-            project_root.simplified_display()
-        );
+        debug!("Found project root: {}", project_root.simplified_display());
 
         // Fast path: The workspace is already cached.
         if let Some(workspace) = workspace_cache.get(project_root, &options.members) {

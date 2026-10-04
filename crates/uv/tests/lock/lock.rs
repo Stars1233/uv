@@ -15098,7 +15098,7 @@ async fn lock_redact_http() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig==2.0.0`
-      cause: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      cause: Failed to fetch: http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
       cause: HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
 
     hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
@@ -15109,7 +15109,7 @@ async fn lock_redact_http() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig==2.0.0`
-      cause: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      cause: Failed to fetch: http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
       cause: HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
 
     hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
@@ -15139,7 +15139,7 @@ async fn lock_redact_http() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to download `iniconfig==2.0.0`
-      cause: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      cause: Failed to fetch: http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
       cause: HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
 
     hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
@@ -17430,7 +17430,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    assert!(context.cache_dir.child("flat-index-v6").is_dir());
+    assert!(context.cache_dir.child("flat-index-v5").is_dir());
 
     let lock = context.read("uv.lock");
 
@@ -22265,43 +22265,91 @@ fn lock_metadata_free_frozen_empty_extra() -> Result<()> {
     -e ./provider
     ");
 
-    let original_lock = context.read("uv.lock");
-    insta::allow_duplicates! {
-        for section in ["optional-dependencies", "dev-dependencies"] {
-            let mut lock = original_lock.parse::<toml_edit::DocumentMut>()?;
-            let Some(packages) = lock["package"].as_array_of_tables_mut() else {
-                anyhow::bail!("lockfile did not contain a package array");
-            };
-            let Some(provider) = packages
-                .iter_mut()
-                .find(|package| package["name"].as_str() == Some("provider"))
-            else {
-                anyhow::bail!("lockfile did not contain the provider");
-            };
-            let Some(selections) = provider[section].as_table_mut() else {
-                anyhow::bail!("provider did not contain {section}");
-            };
-            selections.remove("empty");
-            context
-                .temp_dir
-                .child("uv.lock")
-                .write_str(&lock.to_string())?;
+    // Omitting the provider's empty extra makes the metadata-free lock stale.
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
 
-            uv_snapshot!(context.filters(), context.lock()
-                .arg("--preview-features")
-                .arg("lock-without-metadata")
-                .arg("--locked")
-                .arg("--offline"), @"
-            exit_code: 1 (failure)
-            ----- stderr -----
-            Resolved 2 packages in [TIME]
-            error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
 
-            hint: To update the lockfile, run `uv lock`.
-            ");
-        }
-        Ok::<(), anyhow::Error>(())
-    }?;
+        [manifest]
+        members = ["project", "provider"]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.optional-dependencies]
+        empty = []
+
+        [package.dev-dependencies]
+        empty = []
+
+        [[package]]
+        name = "provider"
+        version = "1.0.0"
+        source = { editable = "provider" }
+
+        [package.dev-dependencies]
+        empty = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--preview-features", "lock-without-metadata", "--locked", "--offline",
+    ]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    // Omitting the provider's empty group also makes the metadata-free lock stale.
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = ["project", "provider"]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.optional-dependencies]
+        empty = []
+
+        [package.dev-dependencies]
+        empty = []
+
+        [[package]]
+        name = "provider"
+        version = "1.0.0"
+        source = { editable = "provider" }
+
+        [package.optional-dependencies]
+        empty = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--preview-features", "lock-without-metadata", "--locked", "--offline",
+    ]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
 
     Ok(())
 }
@@ -22825,13 +22873,34 @@ fn lock_metadata_free_nested_group_conditional_registry_constraint() -> Result<(
         .child("uv.lock")
         .write_str(&original_lock)?;
 
-    let pyproject = context
-        .read("pyproject.toml")
-        .replace("ok==1.0.0", "ok==2.0.0");
+    // Changing the Windows constraint requires a new resolution.
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str(&pyproject)?;
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["ok[first]>=1,<3 ; python_full_version < '3.13' or sys_platform != 'win32'"]
+        other = ["ok[second]>=1,<3 ; sys_platform == 'win32'"]
+        nested = [
+            { include-group = "dev" },
+            "ok[third]>=1,<3 ; python_full_version < '3.13' or sys_platform != 'win32'",
+        ]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "ok", extra = "first" },
+            { package = "ok", extra = "second" },
+        ]]
+        constraint-dependencies = ["ok==2.0.0 ; sys_platform == 'win32'"]
+
+        [tool.uv.dependency-groups]
+        dev = { requires-python = ">=3.13" }
+        "#})?;
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--preview-features")
@@ -27663,7 +27732,7 @@ fn lock_invalid_index() -> Result<()> {
          |                ^^^^^^^^^^^^^^^^
       Index names may only contain letters, digits, hyphens, underscores, and periods, but found unsupported character (` `) in: `internal proxy`
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 9, column 31
                |
              9 |         iniconfig = { index = "internal proxy" }
@@ -27866,15 +27935,15 @@ fn lock_explicit_default_index() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock().arg("--verbose"), @r#"
     exit_code: 1 (failure)
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    DEBUG Adding root workspace member: [TEMP_DIR]/
     DEBUG Found workspace configuration at `[TEMP_DIR]/pyproject.toml`
-    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG Found project root: [TEMP_DIR]/
     DEBUG No Python version file found in workspace: [TEMP_DIR]/
     DEBUG Using Python request `>=3.12` from `requires-python` metadata
-    DEBUG Checking for Python environment at: `.venv`
+    DEBUG Checking for Python environment at: .venv
     DEBUG The project environment's Python version satisfies the request: `Python >=3.12`
     DEBUG Using request connect timeout of [TIME] and read timeout of [TIME]
     DEBUG Found static `requires-dist` for: [TEMP_DIR]/
@@ -27886,12 +27955,12 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Solving with target Python version: >=3.12
     DEBUG Solving with exclude-newer: global: 2024-03-25T00:00:00Z
     DEBUG Adding direct dependency: project*
-    DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (*)
+    DEBUG Searching for a compatible version of project @ `file://[TEMP_DIR]/` (*)
     DEBUG Adding direct dependency: anyio*
     DEBUG Searching for a compatible version of anyio (*)
     DEBUG No compatible version found for: anyio
     DEBUG Recording unit propagation conflict of anyio from incompatibility of (project)
-    DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (<0.1.0 | >0.1.0)
+    DEBUG Searching for a compatible version of project @ `file://[TEMP_DIR]/` (<0.1.0 | >0.1.0)
     DEBUG No compatible version found for: project
     error: No solution found when resolving dependencies
       cause: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
@@ -27968,7 +28037,7 @@ fn lock_unnamed_explicit_index() -> Result<()> {
         |         ^^^^^^^^^^^^^^^^^
       An index with `explicit = true` requires a `name`: https://test.pypi.org/simple
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 9
                |
              8 |         [[tool.uv.index]]
@@ -28013,7 +28082,7 @@ fn lock_invalid_index_cache_control() -> Result<()> {
          |         ^^^^^^^^^^^^^
       `cache-control.api` must be a valid HTTP header value
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 11, column 9
                 |
              11 |         cache-control.api = """
@@ -28440,7 +28509,7 @@ fn lock_repeat_named_index() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 9
                |
              8 |         [[tool.uv.index]]
@@ -28481,7 +28550,7 @@ fn lock_multiple_default_indexes() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 9
                |
              8 |         [[tool.uv.index]]
@@ -30840,7 +30909,7 @@ fn lock_duplicate_sources() -> Result<()> {
         |         ^^^^^^^^^^^^^^^^
       duplicate key
 
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 9, column 9
                |
              9 |         python-multipart = { url = "https://files.pythonhosted.org/packages/c0/3e/9fbfd74e7f5b54f653f7ca99d44ceb56e718846920162165061c4c22b71a/python_multipart-0.0.8-py3-none-any.whl" }
@@ -30865,7 +30934,7 @@ fn lock_duplicate_sources() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 7, column 9
                |
              7 |         [tool.uv.sources]
@@ -30937,7 +31006,7 @@ fn lock_missing_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 1, column 1
                |
              1 | [project]
@@ -30966,7 +31035,7 @@ fn lock_missing_version() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 1, column 1
                |
              1 | [project]
@@ -31617,8 +31686,8 @@ async fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Resu
     exit_code: 2 (failure)
     ----- stderr -----
     warning: Attempted to fetch credentials using the `keyring` command, but it does not support `--mode creds`; upgrade to `keyring>=v25.2.1` or provide a username
-    error: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/iniconfig/`
-      cause: Missing credentials for http://[LOCALHOST]/basic-auth/simple/iniconfig/
+    error: Failed to fetch: http://[LOCALHOST]/basic-auth/simple/iniconfig/
+      cause: Missing credentials for: http://[LOCALHOST]/basic-auth/simple/iniconfig/
     ");
 
     Ok(())
@@ -31743,7 +31812,7 @@ fn lock_multiple_sources_conflict() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: Failed to parse `tool.uv.sources`
       cause: Source markers must be disjoint, but the following markers overlap: `python_full_version == '3.12.*' and sys_platform == 'win32'` and `sys_platform == 'win32'`.
 
@@ -31778,7 +31847,7 @@ fn lock_multiple_sources_no_marker() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: Failed to parse `tool.uv.sources`
       cause: When multiple sources are provided, each source must include a platform marker (e.g., `marker = "sys_platform == 'linux'"`)
     "#);
@@ -33233,9 +33302,6 @@ fn lock_group_requires_python() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest.group-metadata]
-        project = { bar = { requires-python = ">=3.13" } }
-
         [[package]]
         name = "idna"
         version = "3.6"
@@ -33261,6 +33327,9 @@ fn lock_group_requires_python() -> Result<()> {
         foo = [
             { name = "idna" },
         ]
+
+        [package.group-requires-python]
+        bar = ">=3.13"
 
         [package.metadata]
         requires-dist = [{ name = "typing-extensions" }]
@@ -33374,9 +33443,6 @@ fn lock_group_includes_requires_python() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest.group-metadata]
-        project = { bar = { requires-python = ">=3.13" }, baz = { requires-python = ">=3.13,>=3.13.1" }, blargh = { requires-python = ">=3.12.[X],>=3.13" }, foo = { requires-python = ">=3.13" } }
-
         [[package]]
         name = "idna"
         version = "3.6"
@@ -33414,6 +33480,12 @@ fn lock_group_includes_requires_python() -> Result<()> {
             { name = "sniffio", marker = "python_full_version >= '3.13'" },
             { name = "sortedcontainers", marker = "python_full_version >= '3.13'" },
         ]
+
+        [package.group-requires-python]
+        bar = ">=3.13"
+        baz = ">=3.13,>=3.13.1"
+        blargh = ">=3.12.[X],>=3.13"
+        foo = ">=3.13"
 
         [package.metadata]
         requires-dist = [{ name = "typing-extensions" }]
@@ -33601,9 +33673,6 @@ fn lock_group_includes_requires_python_contradiction() -> Result<()> {
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
 
-        [manifest.group-metadata]
-        project = { bar = { requires-python = ">=3.13" }, foo = { requires-python = "<3.13,>=3.13" } }
-
         [[package]]
         name = "idna"
         version = "3.6"
@@ -33629,6 +33698,10 @@ fn lock_group_includes_requires_python_contradiction() -> Result<()> {
         foo = [
             { name = "idna", marker = "python_full_version < '3.13'" },
         ]
+
+        [package.group-requires-python]
+        bar = ">=3.13"
+        foo = "<3.13,>=3.13"
 
         [package.metadata]
         requires-dist = [{ name = "typing-extensions" }]
@@ -33834,7 +33907,7 @@ fn lock_group_invalid_entry_group_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 9, column 16
                |
              9 |         foo = [{include-group = "invalid!"}]
@@ -33868,7 +33941,7 @@ fn lock_group_invalid_duplicate_group_name() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 8, column 9
                |
              8 |         [dependency-groups]
@@ -33960,7 +34033,7 @@ fn lock_group_invalid_entry_type() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 9, column 33
                |
              9 |         foo = [{include-group = true}]
@@ -33993,7 +34066,7 @@ fn lock_group_empty_entry_table() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 9, column 16
                |
              9 |         foo = [{}]
@@ -37801,6 +37874,7 @@ fn lock_arm() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/75/5b/ca6c8bd14007e5ca171c7c03102d17b4f4e0ceb53957e8c44343a9546dcc/numpy-1.26.4-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:03a8c78d01d9781b28a6989f6fa1bb2c4f2d51201cf99d3dd875df6fbd96b23b", size = 13685868, upload-time = "2024-02-05T23:55:56.28Z" },
             { url = "https://files.pythonhosted.org/packages/79/f8/97f10e6755e2a7d027ca783f63044d5b1bc1ae7acb12afe6a9b4286eac17/numpy-1.26.4-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:9fad7dcb1aac3c7f0584a5a8133e3a43eeb2fe127f47e3632d43d677c66c102b", size = 13925109, upload-time = "2024-02-05T23:56:20.368Z" },
             { url = "https://files.pythonhosted.org/packages/4c/0c/9c603826b6465e82591e05ca230dfc13376da512b25ccd0894709b054ed0/numpy-1.26.4-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:ab47dbe5cc8210f55aa58e4805fe224dac469cde56b9f731a4c098b91917159a", size = 13572172, upload-time = "2024-02-05T23:57:21.56Z" },
+            { url = "https://files.pythonhosted.org/packages/16/2e/86f24451c2d530c88daf997cb8d6ac622c1d40d19f5a031ed68a4b73a374/numpy-1.26.4-cp312-cp312-win_amd64.whl", hash = "sha256:08beddf13648eb95f8d867350f6a018a4be2e5ad54c8d8caed89ebca558b2818", size = 15517754, upload-time = "2024-02-05T23:58:36.364Z" },
         ]
 
         [[package]]
@@ -42519,8 +42593,8 @@ async fn lock_exclude_newer_index_disable() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2024-03-25T00:00:00Z
-    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2024-03-25T00:00:00Z
+    warning: `iniconfig-2.0.0.tar.gz` is missing an upload date, but user provided: 2024-03-25T00:00:00Z
+    warning: `iniconfig-2.0.0-py3-none-any.whl` is missing an upload date, but user provided: 2024-03-25T00:00:00Z
     error: No solution found when resolving dependencies
       cause: Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
 
@@ -42598,8 +42672,8 @@ async fn lock_exclude_newer_index_value() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features index-exclude-newer` to disable this warning.
-    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
-    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: `iniconfig-2.0.0.tar.gz` is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: `iniconfig-2.0.0-py3-none-any.whl` is missing an upload date, but user provided: 2025-01-01T00:00:00Z
     error: No solution found when resolving dependencies
       cause: Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
 
@@ -42612,8 +42686,8 @@ async fn lock_exclude_newer_index_value() -> Result<()> {
         .arg("index-exclude-newer"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
-    warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: `iniconfig-2.0.0.tar.gz` is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: `iniconfig-2.0.0-py3-none-any.whl` is missing an upload date, but user provided: 2025-01-01T00:00:00Z
     error: No solution found when resolving dependencies
       cause: Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
 
@@ -44704,7 +44778,7 @@ async fn lock_check_multiple_default_indexes_explicit_assignment_dependency_grou
     uv_snapshot!(context.filters(), context.lock(), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 13, column 9
                 |
              13 |         [[tool.uv.index]]

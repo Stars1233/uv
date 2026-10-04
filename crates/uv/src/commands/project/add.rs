@@ -33,8 +33,8 @@ use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, Pa
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_preview::Preview;
 use uv_python::{
-    ConfigDiscovery, Interpreter, PythonDownloads, PythonEnvironment, PythonPreference,
-    PythonRequest,
+    ConfigDiscovery, Interpreter, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonPreference, PythonRequest,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
@@ -59,9 +59,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    LinkErrorReporting, PlatformState, ProjectEnvironment, ProjectEnvironmentPolicy, ProjectError,
-    ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
-    init_script_python_requirement,
+    LinkErrorReporting, PlatformState, ProjectEnvironment, ProjectEnvironmentPolicy,
+    ProjectEnvironmentTarget, ProjectError, ProjectInterpreter, ProjectPythonRequest,
+    ScriptInterpreter, UniversalState, init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, UvError, project};
@@ -130,6 +130,7 @@ pub(crate) async fn add(
     client_builder: BaseClientBuilder<'_>,
     script: Option<ScriptPath>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -228,6 +229,7 @@ pub(crate) async fn add(
                     project_dir,
                     false,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     config_discovery,
                     &client_builder,
@@ -248,6 +250,7 @@ pub(crate) async fn add(
             python.as_deref().map(PythonRequest::parse),
             &client_builder,
             python_preference,
+            python_arch,
             python_downloads,
             &install_mirrors,
             false,
@@ -308,7 +311,7 @@ pub(crate) async fn add(
 
         if frozen.is_some() || no_sync {
             // Discover the interpreter.
-            let workspace_python = WorkspacePython::from_request(
+            let project_python = ProjectPythonRequest::from_request(
                 python.as_deref().map(PythonRequest::parse),
                 Some(project.workspace()),
                 &defaulted_groups,
@@ -317,11 +320,11 @@ pub(crate) async fn add(
             )
             .await?;
             let interpreter = ProjectInterpreter::discover(
-                project.workspace(),
-                &defaulted_groups,
-                workspace_python,
+                ProjectEnvironmentTarget::from(project.workspace()),
+                project_python,
                 &client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 &install_mirrors,
                 ProjectEnvironmentPolicy::Optional,
@@ -337,13 +340,14 @@ pub(crate) async fn add(
         } else {
             // Discover or create the virtual environment.
             let environment = ProjectEnvironment::get_or_init(
-                project.workspace(),
+                ProjectEnvironmentTarget::from(project.workspace()),
                 None,
                 &defaulted_groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
                 &client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 no_sync,
                 config_discovery,

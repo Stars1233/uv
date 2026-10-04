@@ -70,6 +70,7 @@ fn show_settings_returns_before_running_commands() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -204,6 +205,7 @@ fn pip_compile_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -412,6 +414,7 @@ fn publish_resolved_settings() -> anyhow::Result<()> {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -581,6 +584,7 @@ fn pip_install_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -772,6 +776,7 @@ fn lock_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -899,6 +904,7 @@ fn version_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -1041,6 +1047,7 @@ fn tool_install_baseline() {
             flags: [],
         },
         python_preference: Managed,
+        python_arch: None,
         python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
@@ -2535,7 +2542,7 @@ fn resolve_both_preview() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
              malware_check_url: None,
          },
@@ -2572,7 +2579,7 @@ fn resolve_both_preview() -> anyhow::Result<()> {
     +        flags: [],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
 
      ----- stderr -----
@@ -2609,7 +2616,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 7, column 13
                |
              7 | conflicts = [
@@ -2633,7 +2640,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 7, column 13
                |
              7 | conflicts = [[]]
@@ -2659,7 +2666,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.lock()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 7, column 13
                |
              7 | conflicts = [
@@ -2850,7 +2857,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("requirements.in"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `[CACHE_DIR]/uv.toml`
+    error: Failed to parse: [CACHE_DIR]/uv.toml
       cause: TOML parse error at line 1, column 2
                |
              1 | [project]
@@ -2882,7 +2889,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     warning: The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.
-    error: Failed to parse: `[CACHE_DIR]/pyproject.toml`
+    error: Failed to parse: [CACHE_DIR]/pyproject.toml
       cause: TOML parse error at line 9, column 3
                |
              9 | ""
@@ -3950,13 +3957,14 @@ fn preview_features() {
     +            MissingExcludeNewerPackageLock,
     +            ResolutionInputs,
     +            BatchExport,
+    +            FrozenLockfile,
     +            MinimumLibcVersion,
     +            BuildDependencyCheck,
     +            BuildLazyImports,
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -3984,7 +3992,7 @@ fn preview_features() {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -4156,7 +4164,7 @@ fn preview_precedence() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -4232,7 +4240,7 @@ fn preview_precedence() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -4402,7 +4410,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -4449,7 +4457,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `uv.toml`
+    error: Failed to parse: uv.toml
       cause: cannot specify both `preview` and `preview-features`
     ");
 
@@ -4479,7 +4487,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `uv.toml`
+    error: Failed to parse: uv.toml
       cause: TOML parse error at line 1, column 20
                |
              1 | preview-features = ["  "]
@@ -4493,7 +4501,7 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     uv_snapshot!(context.filters(), add_shared_args(context.version()).arg("--show-settings"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `uv.toml`
+    error: Failed to parse: uv.toml
       cause: TOML parse error at line 1, column 20
                |
              1 | preview-features = 123
@@ -4542,7 +4550,7 @@ fn preview_features_pyproject_toml() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Automatic,
+         python_arch: None,
     ...
     "
     );
@@ -4674,7 +4682,7 @@ fn run_pep723_script_preview_features() -> anyhow::Result<()> {
     +        ],
          },
          python_preference: Managed,
-         python_downloads: Never,
+         python_arch: None,
     ...
     "
     );

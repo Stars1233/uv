@@ -23,14 +23,14 @@ use uv_distribution_types::{
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
-use uv_lock::{Lock, Package, ResolverManifest, SatisfiesResult};
-use uv_normalize::{GroupName, PackageName};
+use uv_lock::{GroupMetadata, Lock, Package, ResolverManifest, SatisfiesResult};
+use uv_normalize::{DefaultGroups, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{
-    ConfigDiscovery, Interpreter, PythonDownloads, PythonEnvironment, PythonPreference,
-    PythonRequest,
+    ConfigDiscovery, Interpreter, PythonArchitecture, PythonDownloads, PythonEnvironment,
+    PythonPreference, PythonRequest,
 };
 use uv_requirements::ExtrasResolver;
 use uv_resolver::{
@@ -51,9 +51,9 @@ use crate::commands::locked_requirements::{LockedRequirements, read_lock_require
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::{LockTarget, find_lock_format_error};
 use crate::commands::project::{
-    MissingLockfileSource, ProjectEnvironmentPolicy, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState, WorkspacePython, init_script_python_requirement,
-    script_extra_build_requires,
+    MissingLockfileSource, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectError,
+    ProjectInterpreter, ProjectPythonRequest, ScriptInterpreter, UniversalState,
+    init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, UvError, pip};
@@ -99,6 +99,7 @@ pub(crate) async fn lock(
     client_builder: BaseClientBuilder<'_>,
     script: Option<ScriptPath>,
     python_preference: PythonPreference,
+    python_arch: Option<PythonArchitecture>,
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     config_discovery: ConfigDiscovery,
@@ -117,6 +118,7 @@ pub(crate) async fn lock(
                 project_dir,
                 false,
                 python_preference,
+                python_arch,
                 python_downloads,
                 config_discovery,
                 &client_builder,
@@ -154,7 +156,7 @@ pub(crate) async fn lock(
             LockTarget::Workspace(workspace) => {
                 // Don't enable any groups' requires-python for interpreter discovery
                 let groups = DependencyGroupsWithDefaults::none();
-                let workspace_python = WorkspacePython::from_request(
+                let project_python = ProjectPythonRequest::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(workspace),
                     &groups,
@@ -163,11 +165,11 @@ pub(crate) async fn lock(
                 )
                 .await?;
                 ProjectInterpreter::discover(
-                    workspace,
-                    &groups,
-                    workspace_python,
+                    ProjectEnvironmentTarget::from(workspace),
+                    project_python,
                     &client_builder,
                     python_preference,
+                    python_arch,
                     python_downloads,
                     &install_mirrors,
                     ProjectEnvironmentPolicy::Optional,
@@ -183,6 +185,7 @@ pub(crate) async fn lock(
                 python.as_deref().map(PythonRequest::parse),
                 &client_builder,
                 python_preference,
+                python_arch,
                 python_downloads,
                 &install_mirrors,
                 false,
@@ -542,6 +545,16 @@ async fn do_lock(
     let members = target.members();
     let packages = target.packages();
     let required_members = target.required_members();
+    let workspace_default_groups = match target {
+        LockTarget::Workspace(workspace) => {
+            if workspace.is_non_project() {
+                Some(workspace.default_groups()?)
+            } else {
+                None
+            }
+        }
+        LockTarget::Script(_) => None,
+    };
 
     // Validate explicit defaults before omitting `["dev"]` from the lockfile. Unlike the
     // implicit default, an explicit `["dev"]` requires the `dev` group to exist.
@@ -560,6 +573,19 @@ async fn do_lock(
     let excludes = target.exclude_dependencies();
     let constraints = target.constraints();
     let dependency_groups = target.dependency_groups()?;
+    let workspace_group_metadata = dependency_groups
+        .iter()
+        .filter_map(|(name, group)| {
+            group.requires_python.clone().map(|requires_python| {
+                (
+                    name.clone(),
+                    GroupMetadata {
+                        requires_python: Some(requires_python),
+                    },
+                )
+            })
+        })
+        .collect::<BTreeMap<_, _>>();
     let source_trees = vec![];
 
     // If necessary, lower the overrides and constraints.
@@ -970,6 +996,8 @@ async fn do_lock(
             required_members,
             &requirements,
             &dependency_groups,
+            &workspace_group_metadata,
+            workspace_default_groups.as_ref(),
             &constraints,
             &overrides,
             &excludes,
@@ -1095,13 +1123,20 @@ async fn do_lock(
                     }),
             );
 
+            // Expand the available extras for each workspace member.
+            let member_requirements = ExtrasResolver::new(&hasher, state.index(), database)
+                .with_reporter(Arc::new(ResolverReporter::from(printer)))
+                .resolve(target.members_requirements())
+                .await
+                .map_err(|err| ProjectError::Operation(err.into()))?;
+            let workspace_members = member_requirements
+                .iter()
+                .map(|requirement| (requirement.name.clone(), requirement.source.clone()))
+                .collect();
+
             // Resolve the requirements.
             let (resolution, _) = pip::operations::resolve(
-                ExtrasResolver::new(&hasher, state.index(), database)
-                    .with_reporter(Arc::new(ResolverReporter::from(printer)))
-                    .resolve(target.members_requirements())
-                    .await
-                    .map_err(|err| ProjectError::Operation(err.into()))?
+                member_requirements
                     .into_iter()
                     .chain(target.group_requirements())
                     .chain(requirements.iter().cloned())
@@ -1124,7 +1159,7 @@ async fn do_lock(
                 source_trees,
                 // The root is always null in workspaces, it "depends on" the projects
                 None,
-                packages.keys().cloned().collect(),
+                workspace_members,
                 &extras,
                 &groups,
                 preferences,
@@ -1190,7 +1225,9 @@ async fn do_lock(
                     })
                     .collect(),
             )
-            .with_member_group_metadata(packages)?;
+            .with_workspace_default_groups(workspace_default_groups)
+            .with_member_group_metadata(packages)?
+            .with_workspace_group_metadata(workspace_group_metadata);
 
             let lock = if let Some(recorder) = recorder {
                 lock.prune_unused(recorder.take())
@@ -1239,6 +1276,8 @@ impl ValidatedLock {
         required_members: &BTreeMap<PackageName, Editability>,
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
+        workspace_group_metadata: &BTreeMap<GroupName, GroupMetadata>,
+        workspace_default_groups: Option<&DefaultGroups>,
         constraints: &[Requirement],
         overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
@@ -1473,6 +1512,8 @@ impl ValidatedLock {
                 excludes,
                 build_constraints,
                 dependency_groups,
+                workspace_group_metadata,
+                workspace_default_groups,
                 dependency_metadata,
                 indexes,
                 interpreter.tags()?,
@@ -1499,6 +1540,20 @@ impl ValidatedLock {
             SatisfiesResult::MismatchedMemberDefaultGroups(expected, actual) => {
                 debug!(
                     "Resolving despite existing lockfile due to mismatched member default groups:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedWorkspaceGroupMetadata(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to mismatched workspace group metadata:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedWorkspaceDefaultGroups(expected, actual) => {
+                debug!(
+                    "Resolving despite existing lockfile due to mismatched workspace default groups:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))

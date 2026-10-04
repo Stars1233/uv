@@ -1,6 +1,6 @@
 [package]
 name = "uv-distribution"
-version = "0.0.88"
+version = "0.0.90"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -25,7 +25,7 @@ uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-errors = { workspace = true }
 uv-extract = { workspace = true }
-uv-fastid = { workspace = true, features = ["serde"] }
+uv-fastid = { workspace = true }
 uv-flags = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-git = { workspace = true }
