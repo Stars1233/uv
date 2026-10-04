@@ -1,6 +1,6 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -23,7 +23,7 @@ use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, Diagnostic, Dist, ExtraBuildRequires,
     ExtraBuildVariables, IndexLocations, InstalledDist, InstalledVersion, LocalDist,
     NameRequirementSpecification, PackageConfigSettings, Requirement, RequirementScope,
-    ResolutionDiagnostic, ResolutionRecorder, UnresolvedRequirement,
+    RequirementSource, ResolutionDiagnostic, ResolutionRecorder, UnresolvedRequirement,
     UnresolvedRequirementSpecification, VersionOrUrlRef,
 };
 use uv_distribution_types::{
@@ -110,7 +110,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     excludes: Vec<ExcludeDependency>,
     source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
-    workspace_members: BTreeSet<PackageName>,
+    workspace_members: BTreeMap<PackageName, RequirementSource>,
     extras: &ExtrasSpecification,
     groups: &BTreeMap<PathBuf, DependencyGroups>,
     preferences: Vec<Preference>,
@@ -923,14 +923,14 @@ fn python_source_files_for_installs<'a>(
     ];
     installs.iter().flat_map(move |install| {
         let dist_info = match installed_dist_info_path(&layout, install.path()).with_context(|| {
-            format!("Failed to locate installed distribution for bytecode compilation: `{install}`")
+            format!("Failed to locate installed distribution for bytecode compilation: {install}")
         }) {
             Ok(dist_info) => dist_info,
             Err(err) => return Box::new(std::iter::once(Err(err))) as PythonSourceFileIterator,
         };
         let Some(record_root) = dist_info.parent().map(|path| CWD.join(path)) else {
             return Box::new(std::iter::once(Err(anyhow!(
-                "Invalid installed distribution path: `{}`",
+                "Invalid installed distribution path: {}",
                 dist_info.user_display()
             ))));
         };
@@ -1126,7 +1126,7 @@ async fn execute_plan(
                     uv_install_wheel::Error::MissingRecord(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at `{}` due to missing `RECORD` file. Installation may result in an incomplete environment.",
                         dist_info.install_path().user_display().cyan(),
                     );
                 }
@@ -1134,7 +1134,7 @@ async fn execute_plan(
                     uv_install_wheel::Error::MissingTopLevel(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at `{}` due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
                         dist_info.install_path().user_display().cyan(),
                     );
                 }

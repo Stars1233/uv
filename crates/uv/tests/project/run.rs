@@ -3091,7 +3091,7 @@ fn run_requirements_txt_arguments() -> Result<()> {
     Installed 2 packages in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/)
      + typing-extensions==4.10.0
-    warning: Ignoring `--index-url` from requirements file: `https://test.pypi.org/simple`. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
+    warning: Ignoring `--index-url` value `https://test.pypi.org/simple` from requirements file. Instead, use the `--index-url` command-line argument, or set `index-url` in a `uv.toml` or `pyproject.toml` file.
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -3284,7 +3284,7 @@ fn run_from_directory() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
-    error: Failed to spawn: `./project/main.py`
+    error: Failed to spawn: ./project/main.py
       cause: [OS ERROR 2]
     ");
 
@@ -4079,7 +4079,7 @@ fn run_invalid_project_table() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Failed to parse: `pyproject.toml`
+    error: Failed to parse: pyproject.toml
       cause: TOML parse error at line 1, column 2
                |
              1 | [project.urls]
@@ -4122,7 +4122,7 @@ fn run_script_without_build_system() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
-    error: Failed to spawn: `entry`
+    error: Failed to spawn: entry
       cause: No such file or directory (os error 2)
     ");
 
@@ -5100,13 +5100,13 @@ fn run_with_not_existing_env_file() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("test.py"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: No environment file found at: `.env.development`
+    error: No environment file found at: .env.development
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("--quiet").arg("test.py"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: No environment file found at: `.env.development`
+    error: No environment file found at: .env.development
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("--quiet").arg("--quiet").arg("test.py"), @"
@@ -5571,6 +5571,16 @@ fn run_groups_requires_python_errors() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
+    ");
+
+    // An isolated environment must satisfy the selected groups too.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("-p").arg("3.12")
+        .arg("python").arg("--version"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
     error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `tool.uv.dependency-groups.dev.requires-python`).
     ");
 
@@ -7794,6 +7804,32 @@ fn run_centralized_environment_no_sync_uses_incompatible_python() -> Result<()> 
     ----- stderr -----
     warning: Using incompatible environment (`project-cp3.12.[X]-[HASH]`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
     "#);
+
+    // Without the project link, discovery must reuse the cached environment before
+    // rejecting the selected interpreter against the updated requirement.
+    uv_fs::remove_virtualenv(&context.temp_dir.join(".venv"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&context.read("pyproject.toml").replace(">=3.11", ">=3.13"))?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--no-sync")
+        .arg("--python")
+        .arg("3.12")
+        .arg("python")
+        .arg("-c")
+        .arg("import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    warning: Using incompatible environment (`project-cp3.12.[X]-[HASH]`) due to `--no-sync` (The project environment's Python version does not meet the Python requirement: `>=3.13`)
+    "#);
+
     Ok(())
 }
 

@@ -13,6 +13,47 @@ use wiremock::{
 };
 
 #[test]
+fn python_list_default_arch() {
+    let context = uv_test::test_context_with_versions!(&[]).with_collapsed_whitespace();
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("cpython-3.14.0-windows-any-none")
+        .arg("--only-downloads")
+        .env(EnvVars::UV_PYTHON_ARCH, "x86_64"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.14.0-windows-x86_64-none <download available>
+    ");
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("cpython-3.14.0-windows-aarch64-none")
+        .arg("--only-downloads")
+        .env(EnvVars::UV_PYTHON_ARCH, "x86_64"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.14.0-windows-aarch64-none <download available>
+    ");
+
+    // Windows PyPy has only an x86-64 build, so the output order is host-independent.
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("pypy-3.11.15-windows-any-none")
+        .arg("--only-downloads")
+        .env(EnvVars::UV_PYTHON_ARCH, "aarch64"), @"
+    exit_code: 0 (success)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("pypy-3.11.15-windows-any-none")
+        .arg("--only-downloads")
+        .arg("--all-arches")
+        .env(EnvVars::UV_PYTHON_ARCH, "aarch64"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    pypy-3.11.15-windows-x86_64-none <download available>
+    ");
+}
+
+#[test]
 fn python_list() {
     let mut context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_symlinks()
@@ -449,6 +490,7 @@ fn python_list_downloads() {
     exit_code: 0 (success)
     ----- stdout -----
     cpython-3.10.[LATEST]-[PLATFORM]    <download available>
+    cpython-3.10.21-[PLATFORM]    <download available>
     cpython-3.10.20-[PLATFORM]    <download available>
     cpython-3.10.19-[PLATFORM]    <download available>
     cpython-3.10.18-[PLATFORM]    <download available>
@@ -698,8 +740,8 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
         .arg("--python-downloads-json-url").arg(format!("{}/404", server.uri())), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/404'
-      cause: Failed to fetch: `http://[LOCALHOST]/404`
+    error: Error while fetching remote python downloads json from `http://[LOCALHOST]/404`
+      cause: Failed to fetch: http://[LOCALHOST]/404
       cause: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/404)
     ");
 
@@ -710,7 +752,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
         .arg("--python-downloads-json-url").arg(format!("{}/invalid", server.uri())), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid
+    error: Unable to parse the JSON Python download list at `http://[LOCALHOST]/invalid`
       cause: EOF while parsing an object at line 1 column 1
     ");
 
@@ -721,7 +763,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
         .arg("--python-downloads-json-url").arg(format!("{}/invalid-hash", server.uri())), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid-hash
+    error: Unable to parse the JSON Python download list at `http://[LOCALHOST]/invalid-hash`
       cause: Invalid hash digest length (expected 64 hexadecimal characters, found 5) at line 16 column 29
     ");
 

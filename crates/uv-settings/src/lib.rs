@@ -12,6 +12,7 @@ use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
+use uv_python::PythonArchitecture;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
 use uv_torch::AmdGpuArchitecture;
@@ -56,10 +57,10 @@ impl FilesystemOptions {
         let root = dir.join("uv");
         let file = root.join("uv.toml");
 
-        tracing::debug!("Searching for user configuration in: `{}`", file.display());
+        tracing::debug!("Searching for user configuration in: {}", file.display());
         match read_file(&file) {
             Ok(options) => {
-                tracing::debug!("Found user configuration in: `{}`", file.display());
+                tracing::debug!("Found user configuration in: {}", file.display());
                 validate_uv_toml(&file, &options)?;
                 Ok(Some(Self(options.with_origin(Origin::User))))
             }
@@ -86,7 +87,7 @@ impl FilesystemOptions {
             return Ok(None);
         };
 
-        tracing::debug!("Found system configuration in: `{}`", file.display());
+        tracing::debug!("Found system configuration in: {}", file.display());
         let options = read_file(&file)?;
         validate_uv_toml(&file, &options)?;
         Ok(Some(Self(options.with_origin(Origin::System))))
@@ -203,7 +204,7 @@ impl FilesystemOptions {
     /// Load a [`FilesystemOptions`] from a `uv.toml` file.
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, Error> {
         let path = path.as_ref();
-        tracing::debug!("Reading user configuration from: `{}`", path.display());
+        tracing::debug!("Reading user configuration from: {}", path.display());
 
         let options = read_file(path)?;
         validate_uv_toml(path, &options)?;
@@ -679,13 +680,13 @@ pub enum Error {
     #[error(transparent)]
     Index(#[from] uv_distribution_types::IndexUrlError),
 
-    #[error("Failed to parse: `{}`", _0.user_display())]
+    #[error("Failed to parse: {}", _0.user_display())]
     PyprojectToml(PathBuf, #[source] Box<toml::de::Error>),
 
-    #[error("Failed to parse: `{}`", _0.user_display())]
+    #[error("Failed to parse: {}", _0.user_display())]
     UvToml(PathBuf, #[source] Box<toml::de::Error>),
 
-    #[error("Failed to parse: `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1
+    #[error("Failed to parse `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1
     )]
     PyprojectOnlyField(PathBuf, &'static str),
 
@@ -739,6 +740,7 @@ pub struct EnvironmentOptions {
     pub skip_wheel_filename_check: Option<bool>,
     pub require_metadata_range_requests: Option<bool>,
     pub hide_build_output: Option<bool>,
+    pub python_arch: Option<PythonArchitecture>,
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
     pub python_no_registry: EnvFlag,
@@ -833,6 +835,7 @@ impl EnvironmentOptions {
                 EnvVars::UV_REQUIRE_METADATA_RANGE_REQUESTS,
             )?,
             hide_build_output: parse_boolish_environment_variable(EnvVars::UV_HIDE_BUILD_OUTPUT)?,
+            python_arch: parse_typed_environment_variable(EnvVars::UV_PYTHON_ARCH, None)?,
             python_install_bin: parse_boolish_environment_variable(EnvVars::UV_PYTHON_INSTALL_BIN)?,
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,

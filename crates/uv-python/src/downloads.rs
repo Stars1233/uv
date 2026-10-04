@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
@@ -22,6 +23,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
+use zstd::stream::read::Decoder;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
@@ -63,7 +65,7 @@ pub enum Error {
     EmptyRequest,
     #[error("Invalid request key (too many parts): {0}")]
     TooManyParts(String),
-    #[error("Failed to download {0}")]
+    #[error("Failed to download `{0}`")]
     NetworkError(DisplaySafeUrl, #[source] WrappedReqwestError),
     #[error(
         "Request failed after {retries} {subject} in {duration:.1}s",
@@ -76,7 +78,7 @@ pub enum Error {
         retries: u32,
         duration: Duration,
     },
-    #[error("Failed to download {0}")]
+    #[error("Failed to download `{0}`")]
     NetworkMiddlewareError(DisplaySafeUrl, #[source] anyhow::Error),
     #[error("Failed to extract archive: {0}")]
     ExtractError(String, #[source] uv_extract::Error),
@@ -92,7 +94,7 @@ pub enum Error {
     InvalidUrl(#[from] DisplaySafeUrlError),
     #[error("Invalid download URL: {0}")]
     InvalidUrlFormat(DisplaySafeUrl),
-    #[error("Invalid path in file URL: `{0}`")]
+    #[error("Invalid path in file URL: {0}")]
     InvalidFileUrl(String),
     #[error("Failed to create download directory")]
     DownloadDirError(#[source] io::Error),
@@ -116,17 +118,17 @@ pub enum Error {
     Mirror(&'static str, String),
     #[error("Failed to determine the libc used on the current platform")]
     LibcDetection(#[from] platform::LibcDetectionError),
-    #[error("Unable to parse the JSON Python download list at {0}")]
+    #[error("Unable to parse the JSON Python download list at `{0}`")]
     InvalidPythonDownloadsJSON(String, #[source] serde_json::Error),
-    #[error("This version of uv is too old to support the JSON Python download list at {0}")]
+    #[error("This version of uv is too old to support the JSON Python download list at `{0}`")]
     UnsupportedPythonDownloadsJSON(String),
-    #[error("Error while fetching remote python downloads json from '{0}'")]
+    #[error("Error while fetching remote python downloads json from `{0}`")]
     FetchingPythonDownloadsJSONError(String, #[source] Box<Self>),
     #[error(transparent)]
     RemotePythonDownloadsJSONClient(Box<uv_client::Error>),
     #[error(transparent)]
     ClientBuild(Box<ClientBuildError>),
-    #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
+    #[error("An offline Python installation was requested, but `{file}` (from `{url}`) is missing in `{}`", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
         url: Box<DisplaySafeUrl>,
@@ -231,7 +233,9 @@ pub struct PythonDownloadRequest {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ArchRequest {
+    /// Require an exact architecture.
     Explicit(Arch),
+    /// Allow architectures supported by the detected host architecture.
     Environment(Arch),
 }
 
@@ -243,6 +247,15 @@ pub struct PlatformRequest {
 }
 
 impl PlatformRequest {
+    /// Require an exact match for the given architecture if this request does not specify one.
+    #[must_use]
+    pub(crate) fn with_default_arch(mut self, arch: Option<Arch>) -> Self {
+        if self.arch.is_none() {
+            self.arch = arch.map(ArchRequest::Explicit);
+        }
+        self
+    }
+
     /// Check if this platform request is satisfied by a platform.
     pub(crate) fn matches(&self, platform: &Platform) -> bool {
         if let Some(os) = self.os
@@ -355,6 +368,15 @@ impl PythonDownloadRequest {
     #[must_use]
     pub fn with_arch(mut self, arch: Arch) -> Self {
         self.arch = Some(ArchRequest::Explicit(arch));
+        self
+    }
+
+    /// Require an exact match for the given architecture if this request does not specify one.
+    #[must_use]
+    pub fn with_default_arch(mut self, arch: Option<Arch>) -> Self {
+        if self.arch.is_none() {
+            self.arch = arch.map(ArchRequest::Explicit);
+        }
         self
     }
 
@@ -942,8 +964,8 @@ impl FromStr for PythonDownloadRequest {
     }
 }
 
-const BUILTIN_PYTHON_DOWNLOADS_JSON: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/download-metadata-minified.json"));
+const BUILTIN_PYTHON_DOWNLOADS_ZSTD: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/download-metadata.json.zst"));
 
 pub struct ManagedPythonDownloadList {
     downloads: Vec<ManagedPythonDownload>,
@@ -1048,10 +1070,7 @@ impl ManagedPythonDownloadList {
         };
 
         let json_downloads = match json_source {
-            Source::BuiltIn => parse_downloads_json(
-                BUILTIN_PYTHON_DOWNLOADS_JSON,
-                "EMBEDDED IN THE BINARY".to_owned(),
-            )?,
+            Source::BuiltIn => parse_builtin_downloads()?,
             Source::Path(ref path) => parse_downloads_json(
                 &fs_err::read(path.as_ref())?,
                 path.to_string_lossy().to_string(),
@@ -1079,13 +1098,17 @@ impl ManagedPythonDownloadList {
     /// Load available Python distributions from the compiled-in list only.
     /// for testing purposes.
     pub fn new_only_embedded() -> Result<Self, Error> {
-        let json_downloads: HashMap<String, JsonPythonDownload> =
-            serde_json::from_slice(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
-                Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_owned(), e)
-            })?;
+        let json_downloads = parse_builtin_downloads()?;
         let result = parse_json_downloads(json_downloads);
         Ok(Self { downloads: result })
     }
+}
+
+/// Decompress and parse the embedded Python download catalog.
+fn parse_builtin_downloads() -> Result<HashMap<String, JsonPythonDownload>, Error> {
+    let mut json = Vec::new();
+    Decoder::with_buffer(BUILTIN_PYTHON_DOWNLOADS_ZSTD)?.read_to_end(&mut json)?;
+    parse_downloads_json(&json, "EMBEDDED IN THE BINARY".to_owned())
 }
 
 /// Parse the downloads JSON.
@@ -1325,9 +1348,9 @@ impl ManagedPythonDownload {
             .await?
         } else {
             // Avoid overlong log lines
-            debug!("Downloading {url}");
+            debug!("Downloading `{url}`");
             debug!(
-                "Extracting {filename} to temporary location: {}",
+                "Extracting `{filename}` to temporary location `{}`",
                 temp_dir.path().simplified_display()
             );
 
@@ -1401,7 +1424,11 @@ impl ManagedPythonDownload {
         }
 
         // Persist it to the target.
-        debug!("Moving {} to {}", extracted.display(), path.user_display());
+        debug!(
+            "Moving `{}` to `{}`",
+            extracted.display(),
+            path.user_display()
+        );
         rename_with_retry(extracted, &path)
             .await
             .map_err(|err| Error::CopyError {
@@ -1422,7 +1449,7 @@ impl ManagedPythonDownload {
         target_cache_file: &Path,
     ) -> Result<(), Error> {
         debug!(
-            "Downloading {} to `{}`",
+            "Downloading `{}` to `{}`",
             url,
             target_cache_file.simplified_display()
         );

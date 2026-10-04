@@ -221,6 +221,11 @@ impl EnvVars {
     #[attr_added_in("0.3.2")]
     pub const UV_PYTHON_PREFERENCE: &'static str = "UV_PYTHON_PREFERENCE";
 
+    /// Selects the architecture for Python requests that do not specify one, e.g., `x86_64`
+    /// or `aarch64`. Requests that name an interpreter executable take precedence.
+    #[attr_added_in("0.12.22")]
+    pub const UV_PYTHON_ARCH: &'static str = "UV_PYTHON_ARCH";
+
     /// Require use of uv-managed Python versions.
     #[attr_added_in("0.6.8")]
     pub const UV_MANAGED_PYTHON: &'static str = "UV_MANAGED_PYTHON";
@@ -1389,7 +1394,7 @@ impl EnvVars {
     pub const UV_RUN_RLIMIT_NOFILE: &'static str = "UV_RUN_RLIMIT_NOFILE";
 
     /// Number of times that `uv run` has been recursively invoked. Used to guard against infinite
-    /// recursion, e.g., when `uv run`` is used in a script shebang.
+    /// recursion, e.g., when `uv run` is used in a script shebang.
     #[attr_hidden]
     #[attr_added_in("0.5.31")]
     pub const UV_RUN_RECURSION_DEPTH: &'static str = "UV_RUN_RECURSION_DEPTH";
